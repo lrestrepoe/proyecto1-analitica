@@ -1,12 +1,11 @@
-# Limpieza y alistamiento para análisis 
+# Limpieza y alistamiento para análisis (enfocado a Q3, manteniendo limpieza completa)
 
 import pandas as pd
 from pathlib import Path
 import unicodedata
 
-
 CARPETA_DATOS = r"C:\Users\Krest\OneDrive\Escritorio\Uniandes\8\analitica\Proyecto1"
-NOMBRE_ARCHIVO = "DatosSaber11_Bolivar.csv"          
+NOMBRE_ARCHIVO = "DatosSaber11_Bolivar.csv"
 
 PERIODO_MINIMO = 20141
 
@@ -39,9 +38,13 @@ Q2_COLS = [
     "punt_global",
 ]
 
+# ✅ Q3: agregamos variables necesarias para análisis por colegio
 Q3_COLS = [
     "fami_educacionmadre",
     "fami_educacionpadre",
+    "cole_codigo_icfes",              # ✅ necesario
+    "cole_nombre_establecimiento",    # ✅ útil para reportes
+    "cole_jornada",                   # ✅ segmento
     "cole_area_ubicacion",
     "cole_caracter",
     "cole_naturaleza",
@@ -81,36 +84,12 @@ def periodo_a_fecha_aprox(periodo):
     mes_por_trimestre = {1: 2, 2: 5, 3: 8, 4: 11}
     return pd.Timestamp(year=anio, month=mes_por_trimestre[trimestre], day=15)
 
-def imprimir_reporte_faltantes(df, nombre):
-    rep = pd.DataFrame({
-        "columna": df.columns,
-        "nulos": [df[c].isna().sum() for c in df.columns],
-        "porcentaje_nulos": [round(df[c].isna().mean() * 100, 2) for c in df.columns],
-    }).sort_values("porcentaje_nulos", ascending=False)
-    print(f"\nREPORTE DE FALTANTES -> {nombre}")
-    print(rep.to_string(index=False))
-    return rep
-
-def verificar_sin_nulos_y_conteo(df, nombre):
-    n = len(df)
-    conteos = df.count()
-    min_c = int(conteos.min()) if len(conteos) else 0
-    max_c = int(conteos.max()) if len(conteos) else 0
-    nulos_total = int(df.isna().sum().sum())
-    print(f"\nVERIFICACION -> {nombre}")
-    print(f"Filas: {n:,} | Nulos totales: {nulos_total:,} | Non-null min: {min_c:,} | Non-null max: {max_c:,}")
-    if nulos_total == 0 and min_c == n and max_c == n:
-        print("OK")
-    else:
-        print("ALERTA")
-
 ruta = Path(CARPETA_DATOS)
 archivo = ruta / NOMBRE_ARCHIVO
 if not archivo.exists() and not NOMBRE_ARCHIVO.lower().endswith(".csv"):
     archivo = ruta / f"{NOMBRE_ARCHIVO}.csv"
 if not archivo.exists():
     raise FileNotFoundError(f"No encontré el archivo en: {archivo}")
-
 
 df_raw = pd.read_csv(
     archivo,
@@ -119,16 +98,21 @@ df_raw = pd.read_csv(
     encoding_errors="replace"
 )
 
+# ✅ blindaje por espacios raros en headers
+df_raw.columns = df_raw.columns.str.strip()
+
 cols_existentes = [c for c in GLOBAL_COLS if c in df_raw.columns]
 cols_faltantes = [c for c in GLOBAL_COLS if c not in df_raw.columns]
 
+# (print corto y útil)
 if cols_faltantes:
-    print("\nOJO: columnas esperadas que no existen en el CSV:")
+    print("\nOJO: columnas esperadas que no existen en el CSV (se omiten):")
     for c in cols_faltantes:
         print(" -", c)
 
 df = df_raw[cols_existentes].copy()
 
+# estandarización de valores faltantes
 df = df.replace({
     "": pd.NA, " ": pd.NA,
     "NA": pd.NA, "N/A": pd.NA,
@@ -136,19 +120,22 @@ df = df.replace({
     "NAN": pd.NA
 })
 
+# Normalización de categóricas
 categ_cols = set([
     "cole_bilingue",
     "cole_area_ubicacion",
     "cole_naturaleza",
+    "cole_jornada",
+    "cole_caracter",
+    "cole_genero",
+    "estu_genero",
     "fami_estratovivienda",
     "fami_tienecomputador",
     "fami_tieneinternet",
-    "estu_genero",
-    "cole_genero",
-    "cole_caracter",
     "fami_educacionmadre",
     "fami_educacionpadre",
     "desemp_ingles",
+    "cole_nombre_establecimiento",
 ])
 
 for c in df.columns:
@@ -158,23 +145,24 @@ for c in df.columns:
 if "cole_bilingue" in df.columns:
     df["cole_bilingue"] = df["cole_bilingue"].replace({"SI": "S", "NO": "N"})
 
+# Puntaje global numérico
 if COL_PUNT_GLOBAL in df.columns:
     df[COL_PUNT_GLOBAL] = pd.to_numeric(df[COL_PUNT_GLOBAL], errors="coerce")
 
+# Periodo numérico
 if COL_PERIODO in df.columns:
     df["periodo_int"] = pd.to_numeric(df[COL_PERIODO], errors="coerce")
 else:
     df["periodo_int"] = pd.NA
 
-antes = len(df)
+# Filtrar periodo
 df = df[df["periodo_int"].notna() & (df["periodo_int"] >= PERIODO_MINIMO)].copy()
 
-antes = len(df)
+# Filtrar punt_global válido
 df = df.dropna(subset=[COL_PUNT_GLOBAL]).copy()
-
-antes = len(df)
 df = df[(df[COL_PUNT_GLOBAL] >= 0) & (df[COL_PUNT_GLOBAL] <= 500)].copy()
 
+# Pruebas 0-100
 pruebas_0_100 = [
     "punt_ingles",
     "punt_matematicas",
@@ -188,93 +176,150 @@ for col in pruebas_0_100:
         df[col] = pd.to_numeric(df[col], errors="coerce")
         df = df[(df[col].isna()) | ((df[col] >= 0) & (df[col] <= 100))].copy()
 
+# Duplicados por ID
 if COL_ID in df.columns:
-    dup_exact = df.duplicated().sum()
     df = df.drop_duplicates(keep="first").copy()
 
     filas_repetidas_id = df[COL_ID].duplicated(keep=False).sum()
-
     if filas_repetidas_id > 0:
         df = df.sort_values(by=[COL_ID, COL_PUNT_GLOBAL], ascending=[True, False]).copy()
-        antes = len(df)
         df = df.drop_duplicates(subset=[COL_ID], keep="first").copy()
 
+# Edad
 if COL_FECHA_NAC in df.columns:
     df["fecha_nac_dt"] = pd.to_datetime(df[COL_FECHA_NAC], errors="coerce", dayfirst=True)
 else:
     df["fecha_nac_dt"] = pd.NaT
 
 df["fecha_examen_aprox"] = df[COL_PERIODO].apply(periodo_a_fecha_aprox)
-
 df["edad"] = (df["fecha_examen_aprox"] - df["fecha_nac_dt"]).dt.days / 365.25
 df["edad"] = df["edad"].apply(lambda x: int(x) if pd.notna(x) else pd.NA)
 
-
-cols_estudio = list(dict.fromkeys(
-    [COL_ID, "edad", COL_COLE_NATURALEZA] + Q1_COLS + Q2_COLS + Q3_COLS
-))
-cols_estudio = [c for c in cols_estudio if c in df.columns]
-
-antes = len(df)
-df_estudio = df.dropna(subset=cols_estudio).copy()
-
-cols_global_final = [c for c in GLOBAL_COLS if c in df_estudio.columns] + ["edad"]
-cols_global_final = list(dict.fromkeys(cols_global_final))
-df_global = df_estudio[cols_global_final].copy()
-
-cols_q1_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA] + Q1_COLS))
-cols_q1_final = [c for c in cols_q1_final if c in df_estudio.columns]
-df_q1 = df_estudio[cols_q1_final].copy()
-
-cols_q2_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA] + Q2_COLS))
-cols_q2_final = [c for c in cols_q2_final if c in df_estudio.columns]
-df_q2 = df_estudio[cols_q2_final].copy()
-
-cols_q3_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA] + Q3_COLS))
-cols_q3_final = [c for c in cols_q3_final if c in df_estudio.columns]
-df_q3 = df_estudio[cols_q3_final].copy()
-
-orden_estudiante = [
-    "estu_consecutivo",
-    "periodo",
-    "estu_fechanacimiento",
-    "edad",
-    "estu_genero",
-]
-
-orden_colegio = [
-    "cole_area_ubicacion",
-    "cole_bilingue",
-    "cole_naturaleza",
-    "cole_genero",
-    "cole_caracter",
-]
-
-orden_familia = [
-    "fami_estratovivienda",
-    "fami_tienecomputador",
-    "fami_tieneinternet",
+# ==========================================================
+# DATASET FINAL SOLO PARA PREGUNTA 3
+# ==========================================================
+cols_q3a = [
+    "punt_global",
     "fami_educacionmadre",
     "fami_educacionpadre",
+    "cole_codigo_icfes",
+    "cole_nombre_establecimiento",
+    "cole_area_ubicacion",
+    "cole_caracter",
+    "cole_naturaleza",
+    "cole_jornada",
 ]
+cols_q3a = [c for c in cols_q3a if c in df.columns]
+df_q3a = df[cols_q3a].copy()
 
-orden_puntajes = [
-    "punt_ingles",
-    "punt_matematicas",
-    "punt_lectura_critica",
-    "punt_c_naturales",
-    "punt_sociales_ciudadanas",
-    "punt_global",
-]
+# Reporte corto de faltantes solo Q3
+rep_q3 = pd.DataFrame({
+    "columna": df_q3a.columns,
+    "pct_nulos": (df_q3a.isna().mean() * 100).round(2),
+    "nulos": df_q3a.isna().sum()
+}).sort_values("pct_nulos", ascending=False)
+print("\nFaltantes (solo variables Q3):")
+print(rep_q3.to_string(index=False))
 
-ordenadas = orden_estudiante + orden_colegio + orden_familia + orden_puntajes
+# Requeridas para análisis
+df_q3a = df_q3a.dropna(subset=[
+    "punt_global", "fami_educacionmadre", "fami_educacionpadre", "cole_codigo_icfes"
+]).copy()
 
-def reordenar_columnas(df):
-    cols_base = [c for c in ordenadas if c in df.columns]
-    cols_restantes = [c for c in df.columns if c not in cols_base]
-    return df[cols_base + cols_restantes]
+print(f"\nQ3 listo: filas = {len(df_q3a):,} | colegios = {df_q3a['cole_codigo_icfes'].nunique():,}")
 
-df_global = reordenar_columnas(df_global)
-df_q1 = reordenar_columnas(df_q1)
-df_q2 = reordenar_columnas(df_q2)
-df_q3 = reordenar_columnas(df_q3)
+# EDA ENFOCADO A PREGUNTA 3
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+edu_map = {
+    "NINGUNO": 0,
+    "PRIMARIA INCOMPLETA": 1,
+    "PRIMARIA COMPLETA": 1,
+    "SECUNDARIA (BACHILLERATO) INCOMPLETA": 2,
+    "SECUNDARIA (BACHILLERATO) COMPLETA": 2,
+    "TECNICA O TECNOLOGICA INCOMPLETA": 3,
+    "TECNICA O TECNOLOGICA COMPLETA": 3,
+    "PROFESIONAL INCOMPLETA": 4,
+    "PROFESIONAL COMPLETA": 4,
+    "POSTGRADO": 5,
+    "MAESTRIA": 5,
+    "DOCTORADO": 5,
+}
+
+df_q3a["edu_madre_n"] = df_q3a["fami_educacionmadre"].map(edu_map)
+df_q3a["edu_padre_n"] = df_q3a["fami_educacionpadre"].map(edu_map)
+df_q3a = df_q3a.dropna(subset=["edu_madre_n", "edu_padre_n"]).copy()
+
+df_q3a["capital_educativo"] = df_q3a[["edu_madre_n", "edu_padre_n"]].mean(axis=1)
+
+corr_global = df_q3a["capital_educativo"].corr(df_q3a["punt_global"])
+print(f"\nCorrelación global capital educativo vs puntaje: {corr_global:.3f}")
+
+# Distribución puntaje
+plt.figure()
+df_q3a["punt_global"].hist(bins=40)
+plt.title("Distribución Puntaje Global")
+plt.xlabel("punt_global"); plt.ylabel("frecuencia")
+plt.show()
+
+# Relación (boxplot)
+plt.figure()
+sns.boxplot(data=df_q3a, x="capital_educativo", y="punt_global")
+plt.title("Puntaje Global vs Capital Educativo Familiar")
+plt.show()
+
+# Dispersión
+plt.figure()
+sns.scatterplot(
+    data=df_q3a.sample(min(len(df_q3a), 5000), random_state=1),
+    x="capital_educativo", y="punt_global", alpha=0.3
+)
+plt.title("Capital Educativo vs Puntaje Global (muestra)")
+plt.show()
+
+# Heatmap correlación
+corr = df_q3a[["punt_global", "edu_madre_n", "edu_padre_n", "capital_educativo"]].corr()
+plt.figure()
+sns.heatmap(corr, annot=True, fmt=".2f", cmap="Blues")
+plt.title("Heatmap correlaciones")
+plt.show()
+
+# Segmentos: dónde se debilita
+segmentos = ["cole_naturaleza", "cole_area_ubicacion", "cole_caracter", "cole_jornada"]
+for seg in segmentos:
+    if seg in df_q3a.columns:
+        tabla = (
+            df_q3a.groupby(seg)
+            .apply(lambda g: g["capital_educativo"].corr(g["punt_global"]) if len(g) >= 200 else np.nan)
+            .dropna()
+            .sort_values()
+        )
+        print(f"\nCorrelación por {seg} (min n=200):")
+        print(tabla.round(3))
+
+# Colegios: brecha ALTO vs BAJO capital educativo
+df_q3a["cap_bin"] = pd.qcut(df_q3a["capital_educativo"], q=2, labels=["BAJO", "ALTO"])
+
+brecha = (
+    df_q3a.groupby(["cole_codigo_icfes", "cap_bin"])["punt_global"].mean()
+    .unstack()
+    .dropna()
+)
+brecha["gap_alto_bajo"] = brecha["ALTO"] - brecha["BAJO"]
+brecha = brecha.sort_values("gap_alto_bajo")
+
+print("\nTop 10 colegios con menor brecha (posible compensación):")
+print(brecha.head(10)[["gap_alto_bajo"]].round(2))
+
+top10_ids = brecha.head(10).index.tolist()
+plt.figure(figsize=(12, 5))
+sns.boxplot(
+    data=df_q3a[df_q3a["cole_codigo_icfes"].isin(top10_ids)],
+    x="cole_codigo_icfes", y="punt_global", hue="cap_bin"
+)
+plt.xticks(rotation=45, ha="right")
+plt.title("Top 10 colegios con menor brecha: puntaje por capital educativo")
+plt.tight_layout()
+plt.show()
