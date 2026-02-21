@@ -324,3 +324,20 @@ plt.title("Brecha promedio por prueba (Men - Female)")
 plt.xlabel("Prueba")
 plt.ylabel("Brecha de puntaje")
 plt.show()
+
+# 3. HISTOGRAMA - MATEMÁTICAS POR GÉNERO
+# Comparamos la distribución de matemáticas entre hombres y mujeres
+
+plt.figure(figsize=(8,5))
+
+plt.hist(df_q2[df_q2["estu_genero"]=="M"]["punt_global"],
+         bins=30, alpha=0.5, label="Masculino")
+
+plt.hist(df_q2[df_q2["estu_genero"]=="F"]["punt_global"],
+         bins=30, alpha=0.5, label="Femenino")
+
+plt.title("Distribución de puntaje en Global por género")
+plt.xlabel("Puntaje Global")
+plt.ylabel("Frecuencia")
+plt.legend()
+plt.show()
