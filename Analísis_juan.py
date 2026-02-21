@@ -377,3 +377,16 @@ plt.xticks(rotation=45, ha="right")
 plt.tight_layout()
 plt.show()
 
+# 7. BRECHA EN PUNTAJE GLOBAL SEGÚN ESTRATO (fami_estratovivienda)
+
+tabla_estrato = df_q2.groupby(["fami_estratovivienda", "estu_genero"])["punt_global"].mean().unstack()
+tabla_estrato["brecha_M_F"] = tabla_estrato["M"] - tabla_estrato["F"]
+
+print(tabla_estrato)
+
+tabla_estrato["brecha_M_F"].plot(kind="bar")
+
+plt.title("Brecha (M - F) en Puntaje Global según estrato del hogar")
+plt.xlabel("Estrato")
+plt.ylabel("Brecha de puntaje")
+plt.show()
