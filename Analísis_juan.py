@@ -288,6 +288,8 @@ print(df_q2.head())
 # Calculamos estadísticas descriptivas (media, std, min, etc.) de puntajes
 # separadas por género del estudiante (estu_genero)
 
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 cols_puntajes = [
     "punt_ingles",
@@ -301,3 +303,24 @@ cols_puntajes = [
 desc_genero = df_q2.groupby("estu_genero")[cols_puntajes].describe()
 print("\nEstadísticas descriptivas:")
 print(desc_genero)
+
+
+# 2. BRECHA PROMEDIO POR PRUEBA (Hombre - Mujer)
+# Calculamos el promedio por género en cada prueba
+promedios = df_q2.groupby("estu_genero")[cols_puntajes].mean()
+
+# Calculamos brecha (Hombres - Mujeres)
+# OJO: aquí asumimos que en estu_genero: 'M' = Masculino y 'F' = Femenino.
+# Si en tus datos aparecen como 'H'/'Mujer'/'Hombre', me avisas y lo ajusto.
+brecha_pruebas = promedios.loc["M"] - promedios.loc["F"]
+
+print("Brecha promedio por prueba (Male - Female):")
+print(brecha_pruebas)
+
+# Gráfico de barras de brecha por prueba
+brecha_pruebas.plot(kind="bar")
+
+plt.title("Brecha promedio por prueba (Men - Female)")
+plt.xlabel("Prueba")
+plt.ylabel("Brecha de puntaje")
+plt.show()
