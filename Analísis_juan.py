@@ -314,13 +314,13 @@ promedios = df_q2.groupby("estu_genero")[cols_puntajes].mean()
 # Si en tus datos aparecen como 'H'/'Mujer'/'Hombre', me avisas y lo ajusto.
 brecha_pruebas = promedios.loc["M"] - promedios.loc["F"]
 
-print("Brecha promedio por prueba (Male - Female):")
+print("Brecha promedio por prueba (Masculino - Femenino):")
 print(brecha_pruebas)
 
 # Gráfico de barras de brecha por prueba
 brecha_pruebas.plot(kind="bar")
 
-plt.title("Brecha promedio por prueba (Men - Female)")
+plt.title("Brecha promedio por prueba (Masculino - Femenino)")
 plt.xlabel("Prueba")
 plt.ylabel("Brecha de puntaje")
 plt.show()
@@ -354,3 +354,26 @@ plt.suptitle("")  # Quita el título automático de pandas
 plt.xlabel("Género (estu_genero)")
 plt.ylabel("Puntaje Global")
 plt.show()
+
+# 5. BRECHA EN EL PUNTAJE GLOBAL SEGÚN TIPO DE COLEGIO (cole_caracter)
+# Calculamos promedio de matemáticas por (tipo de colegio, género)
+tabla_caracter = df_q2.groupby(["cole_caracter", "estu_genero"])["punt_global"].mean().unstack()
+
+# Calculamos brecha (M - F)
+tabla_caracter["brecha_M_F"] = tabla_caracter["M"] - tabla_caracter["F"]
+
+print(tabla_caracter)
+
+# Gráfico de barras de la brecha por tipo de colegio
+tabla_caracter["brecha_M_F"].plot(kind="bar")
+
+plt.title("Brecha (Masculino - Femenino) en puntaje Global según tipo de colegio")
+plt.xlabel("Tipo de colegio")
+plt.ylabel("Brecha de puntaje")
+
+# Rotamos etiquetas para que quepan y no se monten
+plt.xticks(rotation=45, ha="right")
+# Ajusta márgenes automáticamente para que no se corten los labels
+plt.tight_layout()
+plt.show()
+
