@@ -325,8 +325,8 @@ plt.xlabel("Prueba")
 plt.ylabel("Brecha de puntaje")
 plt.show()
 
-# 3. HISTOGRAMA - MATEMÁTICAS POR GÉNERO
-# Comparamos la distribución de matemáticas entre hombres y mujeres
+# 3. HISTOGRAMA - GLOBAL POR GÉNERO
+# Comparamos la distribución de global entre hombres y mujeres
 
 plt.figure(figsize=(8,5))
 
@@ -340,4 +340,17 @@ plt.title("Distribución de puntaje en Global por género")
 plt.xlabel("Puntaje Global")
 plt.ylabel("Frecuencia")
 plt.legend()
+plt.show()
+
+# 4. DIAGRAMA DE CAJA - GLOBAL POR GÉNERO
+
+# Sirve para ver mediana, dispersión y posibles outliers por género
+
+plt.figure(figsize=(6,5))
+df_q2.boxplot(column="punt_global", by="estu_genero")
+
+plt.title("Diagrama de caja - Global por género")
+plt.suptitle("")  # Quita el título automático de pandas
+plt.xlabel("Género (estu_genero)")
+plt.ylabel("Puntaje Global")
 plt.show()
