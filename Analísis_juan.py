@@ -304,6 +304,22 @@ desc_genero = df_q2.groupby("estu_genero")[cols_puntajes].describe()
 print("\nEstadísticas descriptivas:")
 print(desc_genero)
 
+# Contar cuántos estudiantes hay por género
+conteo_genero = df_q2["estu_genero"].value_counts()
+
+# Crear figura
+fig, ax = plt.subplots()
+
+# Gráfico de pastel
+ax.pie(
+    conteo_genero.values,                 # valores numéricos
+    labels=conteo_genero.index,           # etiquetas (M, F)
+    autopct='%1.1f%%',                    # formato porcentaje
+    startangle=90                         # rota el gráfico
+)
+
+plt.title("Distribución porcentual por género (estu_genero)")
+plt.show()
 
 # 2. BRECHA PROMEDIO POR PRUEBA (Hombre - Mujer)
 # Calculamos el promedio por género en cada prueba
@@ -389,4 +405,12 @@ tabla_estrato["brecha_M_F"].plot(kind="bar")
 plt.title("Brecha (M - F) en Puntaje Global según estrato del hogar")
 plt.xlabel("Estrato")
 plt.ylabel("Brecha de puntaje")
+plt.show()
+
+# 8. MAPA DE CALOR - BRECHA POR PRUEBA (M - F)
+promedios_heat = df_q2.groupby("estu_genero")[cols_puntajes].mean()
+brecha_heat = (promedios_heat.loc["M"] - promedios_heat.loc["F"]).to_frame(name="brecha_M_F")
+
+sns.heatmap(brecha_heat, annot=True, cmap="coolwarm")
+plt.title("Mapa de calor - Brecha (M - F) por prueba")
 plt.show()
