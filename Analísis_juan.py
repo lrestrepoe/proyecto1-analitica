@@ -300,9 +300,76 @@ cols_puntajes = [
     "punt_global"
 ]
 
-desc_genero = df_q2.groupby("estu_genero")[cols_puntajes].describe()
-print("\nEstadísticas descriptivas:")
-print(desc_genero)
+
+# TABLA FORMATEADA 
+import matplotlib.pyplot as plt
+import numpy as np
+
+cols_puntajes = [
+    "punt_ingles",
+    "punt_matematicas",
+    "punt_lectura_critica",
+    "punt_c_naturales",
+    "punt_sociales_ciudadanas",
+    "punt_global"
+]
+
+# Nombres bonitos
+nombres_pruebas = [
+    "INGLÉS",
+    "MATEMÁTICAS",
+    "LECTURA CRÍTICA",
+    "C. NATURALES",
+    "SOCIALES",
+    "GLOBAL"
+]
+
+# Calcular estadísticas
+stats = df_q2.groupby("estu_genero")[cols_puntajes].agg(["mean","std","count"]).round(2)
+
+# Extraemos N (es el mismo para todas las pruebas dentro de cada género)
+N_genero = stats[cols_puntajes[0]]["count"]
+
+# Construimos columnas solo con Media y Std
+columnas = []
+for prueba in nombres_pruebas:
+    columnas.extend([f"{prueba}\nMedia", f"{prueba}\nStd"])
+
+# Agregamos columna final N
+columnas.append("N")
+
+# Construimos matriz manualmente
+valores = []
+
+for genero in stats.index:
+    fila = []
+    for col in cols_puntajes:
+        fila.append(stats.loc[genero, (col, "mean")])
+        fila.append(stats.loc[genero, (col, "std")])
+    
+    # Agregamos N una sola vez
+    fila.append(int(N_genero.loc[genero]))
+    
+    valores.append(fila)
+
+# Crear figura
+fig, ax = plt.subplots(figsize=(16,6))
+ax.axis('off')
+
+tabla = ax.table(
+    cellText=valores,
+    colLabels=columnas,
+    rowLabels=stats.index,
+    loc='center'
+)
+
+tabla.auto_set_font_size(False)
+tabla.set_fontsize(8)
+tabla.scale(1.1, 1.4)
+
+plt.title("Estadísticas Descriptivas por Género\n(Media, Desviación Estándar y Tamaño de Muestra)")
+plt.tight_layout()
+plt.show()
 
 # Contar cuántos estudiantes hay por género
 conteo_genero = df_q2["estu_genero"].value_counts()
