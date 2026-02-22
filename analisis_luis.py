@@ -195,9 +195,7 @@ df["fecha_examen_aprox"] = df[COL_PERIODO].apply(periodo_a_fecha_aprox)
 df["edad"] = (df["fecha_examen_aprox"] - df["fecha_nac_dt"]).dt.days / 365.25
 df["edad"] = df["edad"].apply(lambda x: int(x) if pd.notna(x) else pd.NA)
 
-# ==========================================================
 # DATASET FINAL SOLO PARA PREGUNTA 3
-# ==========================================================
 cols_q3a = [
     "punt_global",
     "fami_educacionmadre",
@@ -227,6 +225,8 @@ df_q3a = df_q3a.dropna(subset=[
 ]).copy()
 
 print(f"\nQ3 listo: filas = {len(df_q3a):,} | colegios = {df_q3a['cole_codigo_icfes'].nunique():,}")
+
+print(df_q3a["punt_global"].describe())
 
 # EDA ENFOCADO A PREGUNTA 3
 import numpy as np
@@ -270,14 +270,74 @@ sns.boxplot(data=df_q3a, x="capital_educativo", y="punt_global")
 plt.title("Puntaje Global vs Capital Educativo Familiar")
 plt.show()
 
-# Dispersión
-plt.figure()
-sns.scatterplot(
-    data=df_q3a.sample(min(len(df_q3a), 5000), random_state=1),
-    x="capital_educativo", y="punt_global", alpha=0.3
+
+# puntajes claros por nivel educativo madre y padre (con orden lógico)
+orden_edu = {
+    "NINGUNO": 0,
+    "PRIMARIA INCOMPLETA": 1,
+    "PRIMARIA COMPLETA": 2,
+    "SECUNDARIA (BACHILLERATO) INCOMPLETA": 3,
+    "SECUNDARIA (BACHILLERATO) COMPLETA": 4,
+    "TECNICA O TECNOLOGICA INCOMPLETA": 5,
+    "TECNICA O TECNOLOGICA COMPLETA": 6,
+    "PROFESIONAL INCOMPLETA": 7,
+    "PROFESIONAL COMPLETA": 8,
+    "POSTGRADO": 9,
+}
+
+df_q3a["madre_ord"] = df_q3a["fami_educacionmadre"].map(orden_edu)
+
+prom_madre = (
+    df_q3a.groupby("madre_ord")["punt_global"]
+    .mean()
+    .reset_index()
+    .sort_values("madre_ord")
 )
-plt.title("Capital Educativo vs Puntaje Global (muestra)")
+
+
+def agrupar_nivel(x):
+    if x in ["NINGUNO","PRIMARIA INCOMPLETA","PRIMARIA COMPLETA"]:
+        return "Baja"
+    elif "SECUNDARIA" in str(x):
+        return "Media"
+    elif "TECNICA" in str(x):
+        return "Tecnica"
+    else:
+        return "Superior"
+
+df_q3a["madre_grupo"] = df_q3a["fami_educacionmadre"].apply(agrupar_nivel)
+df_q3a["padre_grupo"] = df_q3a["fami_educacionpadre"].apply(agrupar_nivel)
+
+df_madre = df_q3a[["punt_global","madre_grupo"]].copy()
+df_madre["Tipo"] = "Madre"
+df_madre = df_madre.rename(columns={"madre_grupo":"Nivel"})
+
+df_padre = df_q3a[["punt_global","padre_grupo"]].copy()
+df_padre["Tipo"] = "Padre"
+df_padre = df_padre.rename(columns={"padre_grupo":"Nivel"})
+
+df_long = pd.concat([df_madre, df_padre])
+
+orden = ["Baja","Media","Tecnica","Superior"]
+
+plt.figure(figsize=(8,5))
+
+sns.barplot(
+    data=df_long,
+    x="Nivel",
+    y="punt_global",
+    hue="Tipo",
+    order=orden,
+    estimator="mean",
+    ci=None)
+
+plt.title("Puntaje promedio según educación de madre y padre")
+plt.ylabel("Puntaje promedio")
+plt.ylim(100, 400)
+plt.xlabel("Nivel educativo (agrupado)")
+plt.tight_layout()
 plt.show()
+
 
 # Heatmap correlación
 corr = df_q3a[["punt_global", "edu_madre_n", "edu_padre_n", "capital_educativo"]].corr()
@@ -286,40 +346,47 @@ sns.heatmap(corr, annot=True, fmt=".2f", cmap="Blues")
 plt.title("Heatmap correlaciones")
 plt.show()
 
-# Segmentos: dónde se debilita
-segmentos = ["cole_naturaleza", "cole_area_ubicacion", "cole_caracter", "cole_jornada"]
-for seg in segmentos:
-    if seg in df_q3a.columns:
-        tabla = (
-            df_q3a.groupby(seg)
-            .apply(lambda g: g["capital_educativo"].corr(g["punt_global"]) if len(g) >= 200 else np.nan)
-            .dropna()
-            .sort_values()
-        )
-        print(f"\nCorrelación por {seg} (min n=200):")
-        print(tabla.round(3))
+df_q3a["cap_bin"] = pd.qcut(
+    df_q3a["capital_educativo"],
+    q=2,
+    labels=["BAJO","ALTO"]
+)
 
-# Colegios: brecha ALTO vs BAJO capital educativo
-df_q3a["cap_bin"] = pd.qcut(df_q3a["capital_educativo"], q=2, labels=["BAJO", "ALTO"])
-
-brecha = (
-    df_q3a.groupby(["cole_codigo_icfes", "cap_bin"])["punt_global"].mean()
+brecha_nat = (
+    df_q3a.groupby(["cole_naturaleza","cap_bin"])["punt_global"]
+    .mean()
     .unstack()
     .dropna()
 )
-brecha["gap_alto_bajo"] = brecha["ALTO"] - brecha["BAJO"]
-brecha = brecha.sort_values("gap_alto_bajo")
 
-print("\nTop 10 colegios con menor brecha (posible compensación):")
-print(brecha.head(10)[["gap_alto_bajo"]].round(2))
+brecha_nat["gap_alto_bajo"] = brecha_nat["ALTO"] - brecha_nat["BAJO"]
 
-top10_ids = brecha.head(10).index.tolist()
-plt.figure(figsize=(12, 5))
-sns.boxplot(
-    data=df_q3a[df_q3a["cole_codigo_icfes"].isin(top10_ids)],
-    x="cole_codigo_icfes", y="punt_global", hue="cap_bin"
-)
-plt.xticks(rotation=45, ha="right")
-plt.title("Top 10 colegios con menor brecha: puntaje por capital educativo")
-plt.tight_layout()
+plt.figure(figsize=(6,4))
+brecha_nat["gap_alto_bajo"].plot(kind="bar")
+plt.title("Brecha (ALTO - BAJO) por naturaleza del colegio")
+plt.ylabel("Diferencia promedio en puntaje")
+plt.xticks(rotation=0)
 plt.show()
+
+brecha_area = (
+    df_q3a.groupby(["cole_area_ubicacion","cap_bin"])["punt_global"]
+    .mean()
+    .unstack()
+    .dropna()
+)
+
+brecha_area["gap_alto_bajo"] = brecha_area["ALTO"] - brecha_area["BAJO"]
+
+plt.figure(figsize=(6,4))
+brecha_area["gap_alto_bajo"].plot(kind="bar")
+plt.title("Brecha (ALTO - BAJO) por ubicación")
+plt.ylabel("Diferencia promedio en puntaje")
+plt.xticks(rotation=0)
+plt.show()
+
+print(df_q3a.groupby("madre_grupo")["punt_global"].mean())
+print(df_q3a.groupby("padre_grupo")["punt_global"].mean())
+
+prom = df_q3a.groupby("madre_grupo")["punt_global"].mean()
+brecha_extremos = prom["Superior"] - prom["Baja"]
+print(brecha_extremos)
