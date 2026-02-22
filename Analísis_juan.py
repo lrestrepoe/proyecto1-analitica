@@ -385,7 +385,7 @@ ax.pie(
     startangle=90                         # rota el gráfico
 )
 
-plt.title("Distribución porcentual por género (estu_genero)")
+plt.title("Distribución porcentual por género")
 plt.show()
 
 # 2. BRECHA PROMEDIO POR PRUEBA (Hombre - Mujer)
@@ -393,19 +393,34 @@ plt.show()
 promedios = df_q2.groupby("estu_genero")[cols_puntajes].mean()
 
 # Calculamos brecha (Hombres - Mujeres)
-# OJO: aquí asumimos que en estu_genero: 'M' = Masculino y 'F' = Femenino.
-# Si en tus datos aparecen como 'H'/'Mujer'/'Hombre', me avisas y lo ajusto.
 brecha_pruebas = promedios.loc["M"] - promedios.loc["F"]
 
 print("Brecha promedio por prueba (Masculino - Femenino):")
 print(brecha_pruebas)
 
-# Gráfico de barras de brecha por prueba
-brecha_pruebas.plot(kind="bar")
+# Nombres más limpios para el eje X
+labels_bonitos = [
+    "Inglés",
+    "Matemáticas",
+    "Lectura Crítica",
+    "C. Naturales",
+    "Sociales",
+    "Global"
+]
 
-plt.title("Brecha promedio por prueba (Masculino - Femenino)")
-plt.xlabel("Prueba")
-plt.ylabel("Brecha de puntaje")
+fig, ax = plt.subplots(figsize=(10,5))
+
+# Graficar
+brecha_pruebas.plot(kind="bar", ax=ax)
+
+# Cambiar etiquetas del eje X
+ax.set_xticklabels(labels_bonitos, rotation=45, ha="right")
+
+ax.set_title("Brecha promedio por prueba (Masculino - Femenino)")
+ax.set_xlabel("Prueba")
+ax.set_ylabel("Brecha de puntaje")
+
+plt.tight_layout()
 plt.show()
 
 # 3. HISTOGRAMA - GLOBAL POR GÉNERO
@@ -460,21 +475,29 @@ plt.xticks(rotation=45, ha="right")
 plt.tight_layout()
 plt.show()
 
-# 7. BRECHA EN PUNTAJE GLOBAL SEGÚN ESTRATO (fami_estratovivienda)
+# 6. BRECHA EN PUNTAJE GLOBAL SEGÚN ESTRATO (fami_estratovivienda)
 
 tabla_estrato = df_q2.groupby(["fami_estratovivienda", "estu_genero"])["punt_global"].mean().unstack()
 tabla_estrato["brecha_M_F"] = tabla_estrato["M"] - tabla_estrato["F"]
 
-print(tabla_estrato)
+# Crear figura más grande
+plt.figure(figsize=(10,5))
 
 tabla_estrato["brecha_M_F"].plot(kind="bar")
 
 plt.title("Brecha (M - F) en Puntaje Global según estrato del hogar")
 plt.xlabel("Estrato")
 plt.ylabel("Brecha de puntaje")
+
+# Rotar etiquetas para que no se monten
+plt.xticks(rotation=45, ha="right")
+
+# Ajustar márgenes automáticamente
+plt.tight_layout()
+
 plt.show()
 
-# 8. MAPA DE CALOR - BRECHA POR PRUEBA (M - F)
+# 7. MAPA DE CALOR - BRECHA POR PRUEBA (M - F)
 promedios_heat = df_q2.groupby("estu_genero")[cols_puntajes].mean()
 brecha_heat = (promedios_heat.loc["M"] - promedios_heat.loc["F"]).to_frame(name="brecha_M_F")
 
