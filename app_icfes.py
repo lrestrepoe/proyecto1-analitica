@@ -2,6 +2,7 @@ from pathlib import Path
 import dash 
 from dash import Input, Input, Output, html, dcc
 import pandas as pd
+import plotly.express as px
 
 # Cargar el DataFrame global desde un archivo Parquet
 BASE_DIR = Path(__file__).resolve().parent
@@ -84,14 +85,11 @@ app.layout = html.Div([
                     [
                         html.H3("Resumen"),
                         html.Div(id="resumen"),
+
+                        html.H3("Puntaje global por colegio bilingüe"),
+                        dcc.Graph(id="grafico_q1"),
+                        html.Div(id="insight_q1", style={"marginTop": "8px", "fontSize": "16px"}),
                         html.P("Aquí van las pestañas Home / Q1 / Q2 / Q3."),
-                        html.Ul(
-                            [
-                                html.Li("Q1: Bilingüe vs puntaje global"),
-                                html.Li("Q2: Brecha por género"),
-                                html.Li("Q3: Educación padres y compensación"),
-                            ]
-                        ),
                     ],
                     style={"width": "75%", "padding": "16px"},
                 ),
@@ -130,6 +128,85 @@ def mostrar_resumen(data):
 
     return f"Filas: {len(dff):,} | Promedio: {dff['punt_global'].mean():.2f}"
 
+#Grafico Q1: puntaje global por colegio bilingüe
+@app.callback(
+    Output("grafico_q1", "figure"),
+    Input("df_filtrado", "data")
+)
+def actualizar_q1(data):
+    dff = pd.DataFrame(data)
+
+    if dff.empty:
+        return px.bar(title="No hay datos")
+
+    if "cole_bilingue" not in dff.columns:
+        return px.bar(title="No existe columna cole_bilingue")
+
+    dff["bilingue_label"] = dff["cole_bilingue"].map({
+        "S": "Sí",
+        "N": "No",
+        "SI": "Sí",
+        "NO": "No"
+    })
+    # Agrupar por bilingüe
+    resumen = (
+        dff.groupby("cole_bilingue")["punt_global"]
+        .agg(["mean", "count", "std"])
+        .reset_index()
+    )
+
+    resumen["mean"] = resumen["mean"].round(2)
+
+    fig = px.bar(
+        resumen,
+        x="cole_bilingue",
+        y="mean",
+        text="mean",
+        title="Promedio de puntaje global por tipo de colegio bilingüe",
+        labels={"cole_bilingue": "Colegio bilingüe", "mean": "Promedio puntaje global"},
+    )
+
+    fig.update_traces(textposition="outside")
+    fig.update_layout(yaxis_range=[0, 500])
+
+    return fig
+
+# Insight Q1: diferencia en puntaje global entre colegios bilingües y no bilingües
+@app.callback(
+    Output("insight_q1", "children"),
+    Input("df_filtrado", "data")
+)
+def insight_q1(data):
+    dff = pd.DataFrame(data)
+    if dff.empty or "cole_bilingue" not in dff.columns or "punt_global" not in dff.columns:
+        return "No hay suficiente información para calcular la diferencia."
+
+    # Etiquetas Sí/No
+    dff["bilingue_label"] = dff["cole_bilingue"].map({
+        "S": "Sí",
+        "N": "No",
+        "SI": "Sí",
+        "NO": "No"
+    })
+
+    # Promedios
+    prom = dff.groupby("bilingue_label")["punt_global"].mean()
+
+    if ("Sí" not in prom.index) or ("No" not in prom.index):
+        return "Con los filtros actuales no hay datos para comparar 'Sí' vs 'No'."
+
+    diff = prom["Sí"] - prom["No"]
+
+    # Conteos
+    n_si = (dff["bilingue_label"] == "Sí").sum()
+    n_no = (dff["bilingue_label"] == "No").sum()
+
+    signo = "más" if diff >= 0 else "menos"
+    return (
+        f"Los estudiantes de colegios bilingües obtienen en promedio "
+        f"{abs(diff):.1f} puntos {signo} en puntaje global que los de colegios no bilingües "
+        f"(Sí: n={n_si:,} | No: n={n_no:,})."
+    )
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
