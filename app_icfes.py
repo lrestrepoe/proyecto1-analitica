@@ -1,6 +1,6 @@
 from pathlib import Path
 import dash 
-from dash import html, dcc
+from dash import Input, Input, Output, html, dcc
 import pandas as pd
 
 # Cargar el DataFrame global desde un archivo Parquet
@@ -29,8 +29,9 @@ app = dash.Dash(__name__)
 server = app.server  # Se usa despues para aws
 
 # layout base (texto e info)
-app.layout = html.Div(
-    [
+app.layout = html.Div([
+    dcc.Store(id="df_filtrado"),
+    
         # Header arriba
         html.Div(
             [
@@ -47,7 +48,7 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.H4("Filtros"),
-                        html.Label("Año (por ahora no funciona, es solo UI)"),
+                        html.Label("Año"),
                         dcc.Dropdown(
                             id="f_anio",
                             options=opciones("anio"),
@@ -68,8 +69,7 @@ app.layout = html.Div(
                             multi=True,
                             placeholder="Selecciona estrato(s)",
 ),
-                        html.Br(),
-                        html.Button("Restablecer", n_clicks=0),
+
                     ],
                     style={
                         "width": "25%",
@@ -82,7 +82,8 @@ app.layout = html.Div(
                 # Contenido principal
                 html.Div(
                     [
-                        html.H3("Contenido"),
+                        html.H3("Resumen"),
+                        html.Div(id="resumen"),
                         html.P("Aquí van las pestañas Home / Q1 / Q2 / Q3."),
                         html.Ul(
                             [
@@ -99,6 +100,36 @@ app.layout = html.Div(
         ),
     ]
 )
+
+@app.callback(
+    Output("df_filtrado", "data"),
+    Input("f_anio", "value"),
+    Input("f_naturaleza", "value"),
+    Input("f_estrato", "value"),
+)
+def filtrar_df(anios, naturalezas, estratos):
+    dff = df.copy()
+
+    if anios:
+        dff = dff[dff["anio"].isin(anios)]
+    if naturalezas:
+        dff = dff[dff["cole_naturaleza"].isin(naturalezas)]
+    if estratos:
+        dff = dff[dff["fami_estratovivienda"].isin(estratos)]
+
+    return dff.to_dict("records")
+
+@app.callback(
+    Output("resumen", "children"),
+    Input("df_filtrado", "data")
+)
+def mostrar_resumen(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return "No hay datos"
+
+    return f"Filas: {len(dff):,} | Promedio: {dff['punt_global'].mean():.2f}"
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
