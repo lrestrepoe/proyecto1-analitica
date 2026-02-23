@@ -26,9 +26,9 @@ def opciones(col):
 df["anio"] = (pd.to_numeric(df["periodo"], errors="coerce") // 10).astype("Int64")
 
 # crear app
-app = dash.Dash(__name__)
-server = app.server  # Se usa despues para aws
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
+server = app.server  # Se usa despues para aws
 # layout base (texto e info)
 app.layout = html.Div(
     [
@@ -90,24 +90,19 @@ app.layout = html.Div(
                 ),
 
                 # Q1
-                html.Div(
-                    [
-                        html.H3("Relacion de colegio Bilingüe y puntaje global"),
-                        dcc.Graph(id="grafico_q1"),
-                        html.Div(id="insight_q1", style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"}),
-                        dcc.Graph(id="grafico_q1_estrato"),
-                        html.Div([dcc.Graph(id="grafico_q1_pc")], style={"flex": "1"}),
-                        html.Div([dcc.Graph(id="grafico_q1_internet")], style={"flex": "1"}),
-                        # luego aquí metemos pc / internet en el siguiente paso
+                dcc.Tabs(
+                    id="tabs",
+                    value="tab-q1",
+                    children=[
+                        dcc.Tab(label="Pregunta 1: Bilingüe", value="tab-q1"),
+                        dcc.Tab(label="Pregunta 2: Género", value="tab-q2"),
+                        dcc.Tab(label="Pregunta 3: Educación padres", value="tab-q3"),
                     ],
-                    style={
-                        "marginTop": "12px","padding": "12px","border": "1px solid #eee",
-                        "borderRadius": "12px","backgroundColor": "white", "display": "flex", "flexDirection": "column", "gap": "12px"
-                    },
                 ),
+                html.Div(id="contenido_tabs", style={"marginTop": "12px"}),
             ],
             style={
-                "maxWidth": "1100px",   # limita el ancho para mejor lectura
+                "maxWidth": "1500px",   # limita el ancho para mejor lectura
                 "margin": "0 auto",     # centra
                 "padding": "0 16px 40px 16px",
             },
@@ -136,6 +131,87 @@ def filtrar_df(anios, naturalezas, estratos):
         dff = dff[dff["fami_estratovivienda"].isin(estratos)]
 
     return dff.to_dict("records")
+
+@app.callback(
+    Output("contenido_tabs", "children"),
+    Input("tabs", "value")
+)
+def render_tab(tab):
+    if tab == "tab-q1":
+        return html.Div(
+            [
+                html.Div(
+                    [
+                        html.H3("Relación de colegio bilingüe y puntaje global"),
+                        dcc.Graph(id="grafico_q1"),
+                        html.Div(
+                            id="insight_q1",
+                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
+                        ),
+
+                        # 2 por fila
+                        html.Div(
+                            [
+                                html.Div([dcc.Graph(id="grafico_q1_estrato")], style={"flex": "1"}),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        html.Div(
+                            [
+                                html.Div([dcc.Graph(id="grafico_q1_internet")], style={"flex": "1"}),
+                                html.Div([dcc.Graph(id="grafico_q1_pc")], style={"flex": "1"}),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+                    ],
+                    style={
+                        "padding": "12px",
+                        "border": "1px solid #eee",
+                        "borderRadius": "12px",
+                        "backgroundColor": "white",
+                    },
+                )
+            ]
+        )
+
+    if tab == "tab-q2":
+        return html.Div(
+            [
+                html.Div(
+                    [
+                        html.H3("Q2: Brecha por género"),
+                        html.P("Aquí vamos a construir las gráficas de brecha por prueba (H vs M)."),
+                    ],
+                    style={
+                        "padding": "12px",
+                        "border": "1px solid #eee",
+                        "borderRadius": "12px",
+                        "backgroundColor": "white",
+                    },
+                )
+            ]
+        )
+
+    if tab == "tab-q3":
+        return html.Div(
+            [
+                html.Div(
+                    [
+                        html.H3("Q3: Educación padres y puntaje global"),
+                        html.P("Aquí vamos a construir la relación y dónde se debilita (compensación del colegio)."),
+                    ],
+                    style={
+                        "padding": "12px",
+                        "border": "1px solid #eee",
+                        "borderRadius": "12px",
+                        "backgroundColor": "white",
+                    },
+                )
+            ]
+        )
+
+    return html.Div("Selecciona una pestaña.")
 
 # Callbacks para actualizar resumen, gráficos e insights según el df filtrado
 @app.callback(
