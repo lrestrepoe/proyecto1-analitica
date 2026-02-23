@@ -1,6 +1,6 @@
 from pathlib import Path
 import dash 
-from dash import Input, Input, Output, html, dcc
+from dash import Input, Output, html, dcc
 import pandas as pd
 import plotly.express as px
 
@@ -30,63 +30,95 @@ app = dash.Dash(__name__)
 server = app.server  # Se usa despues para aws
 
 # layout base (texto e info)
-app.layout = html.Div([
-    dcc.Store(id="df_filtrado"),
-    
-        # Header arriba
+app.layout = html.Div(
+    [
+        dcc.Store(id="df_filtrado"),
+
+        # Header
         html.Div(
             [
                 html.H2("Resultados de la prueba Saber 11 en el departamento del Bolívar"),
                 html.P("Análisis de resultados"),
             ],
-            style={"padding": "12px 16px", "borderBottom": "1px solid #ddd", "backgroundColor": "#f9f9f9", "textAlign": "center"},
+            style={
+                "padding": "12px 16px",
+                "borderBottom": "1px solid #ddd",
+                "backgroundColor": "#f9f9f9",
+                "textAlign": "center",
+            },
         ),
 
-        html.Div([
+        # Contenedor centrado
+        html.Div(
+            [
+                # Filtros
+                html.Div(
+                    [
+                        html.Div([
+                            html.Label("Año"),
+                            dcc.Dropdown(id="f_anio", options=opciones("anio"), multi=True, placeholder="Todos"),
+                        ], style={"flex": "1"}),
 
-            # FILTROS HORIZONTALES
-            html.Div(
-                [
-                    html.Div([
-                        html.Label("Año"),
-                        dcc.Dropdown(id="f_anio", options=opciones("anio"), multi=True),
-                    ], style={"width": "30%"}),
+                        html.Div([
+                            html.Label("Tipo colegio"),
+                            dcc.Dropdown(id="f_naturaleza", options=opciones("cole_naturaleza"), multi=True, placeholder="Todos"),
+                        ], style={"flex": "1"}),
 
-                    html.Div([
-                        html.Label("Tipo colegio"),
-                        dcc.Dropdown(id="f_naturaleza", options=opciones("cole_naturaleza"), multi=True),
-                    ], style={"width": "30%"}),
+                        html.Div([
+                            html.Label("Estrato"),
+                            dcc.Dropdown(id="f_estrato", options=opciones("fami_estratovivienda"), multi=True, placeholder="Todos"),
+                        ], style={"flex": "1"}),
 
-                    html.Div([
-                        html.Label("Estrato"),
-                        dcc.Dropdown(id="f_estrato", options=opciones("fami_estratovivienda"), multi=True),
-                    ], style={"width": "30%"}),
-                ],
-                style={
-                    "display": "flex",
-                    "gap": "20px",
-                    "padding": "10px",
-                    "borderBottom": "1px solid #ddd",
-                }
-            ),
+                    ],
+                    style={
+                        "display": "flex","gap": "12px","padding": "12px",
+                        "border": "1px solid #eee","borderRadius": "12px",
+                        "backgroundColor": "white","marginTop": "16px",
+                    },
+                ),
 
-            # CONTENIDO FULL WIDTH
-            html.Div([
-                html.H3("Resumen"),
-                html.Div(id="resumen"),
+                # Resumen como
+                html.Div(
+                    [
+                        html.H3("Resumen", style={"marginTop": "0px"}),
+                        html.Div(id="resumen"),
+                    ],
+                    style={
+                        "marginTop": "12px","padding": "12px","border": "1px solid #eee",
+                        "borderRadius": "12px","backgroundColor": "white",
+                    },
+                ),
 
-                dcc.Graph(id="grafico_q1"),
-                html.Div(id="insight_q1"),
+                # Q1
+                html.Div(
+                    [
+                        html.H3("Relacion de colegio Bilingüe y puntaje global"),
+                        dcc.Graph(id="grafico_q1"),
+                        html.Div(id="insight_q1", style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"}),
 
-                dcc.Graph(id="grafico_q1_estrato"),
-                dcc.Graph(id="grafico_q1_pc"),
-
-                dcc.Graph(id="grafico_q1_internet"),
-            ], style={"padding": "20px"})
-
-        ])
+                        dcc.Graph(id="grafico_q1_estrato"),
+                        # luego aquí metemos pc / internet en el siguiente paso
+                    ],
+                    style={
+                        "marginTop": "12px",
+                        "padding": "12px",
+                        "border": "1px solid #eee",
+                        "borderRadius": "12px",
+                        "backgroundColor": "white",
+                    },
+                ),
+            ],
+            style={
+                "maxWidth": "1100px",   # limita el ancho para mejor lectura
+                "margin": "0 auto",     # centra
+                "padding": "0 16px 40px 16px",
+            },
+        ),
     ]
 )
+
+# -----------
+# Callbacks
 
 # Callback para filtrar el DataFrame según los dropdowns
 @app.callback(
@@ -141,20 +173,18 @@ def actualizar_q1(data):
     })
     # Agrupar por bilingüe
     resumen = (
-        dff.groupby("cole_bilingue")["punt_global"]
+        dff.groupby("bilingue_label")["punt_global"]
         .agg(["mean", "count", "std"])
         .reset_index()
     )
 
-    resumen["mean"] = resumen["mean"].round(2)
-
     fig = px.bar(
         resumen,
-        x="cole_bilingue",
+        x="bilingue_label",
         y="mean",
         text="mean",
         title="Promedio de puntaje global por tipo de colegio bilingüe",
-        labels={"cole_bilingue": "Colegio bilingüe", "mean": "Promedio puntaje global"},
+        labels={"bilingue_label": "Colegio bilingüe", "mean": "Promedio puntaje global"},
     )
 
     fig.update_traces(textposition="outside")
