@@ -36,69 +36,59 @@ app.layout = html.Div([
         # Header arriba
         html.Div(
             [
-                html.H2("ICFES Bolívar – Tablero"),
-                html.P("Análisis de resultados del examen Saber 11 en el departamento de Bolívar."),
+                html.H2("Resultados de la prueba Saber 11 en el departamento del Bolívar"),
+                html.P("Análisis de resultados"),
             ],
-            style={"padding": "12px 16px", "borderBottom": "1px solid #ddd"},
+            style={"padding": "12px 16px", "borderBottom": "1px solid #ddd", "backgroundColor": "#f9f9f9", "textAlign": "center"},
         ),
 
-        # Cuerpo: sidebar + contenido
-        html.Div(
-            [
-                # Sidebar
-                html.Div(
-                    [
-                        html.H4("Filtros"),
+        html.Div([
+
+            # FILTROS HORIZONTALES
+            html.Div(
+                [
+                    html.Div([
                         html.Label("Año"),
-                        dcc.Dropdown(
-                            id="f_anio",
-                            options=opciones("anio"),
-                            multi=True,
-                            placeholder="Selecciona año(s)",
-                        ),
-                        html.Label("Tipo de colegio"),
-                        dcc.Dropdown(
-                            id="f_naturaleza",
-                            options=opciones("cole_naturaleza"),
-                            multi=True,
-                            placeholder="Selecciona tipo de colegio",
-                        ),
+                        dcc.Dropdown(id="f_anio", options=opciones("anio"), multi=True),
+                    ], style={"width": "30%"}),
+
+                    html.Div([
+                        html.Label("Tipo colegio"),
+                        dcc.Dropdown(id="f_naturaleza", options=opciones("cole_naturaleza"), multi=True),
+                    ], style={"width": "30%"}),
+
+                    html.Div([
                         html.Label("Estrato"),
-                        dcc.Dropdown(
-                            id="f_estrato",
-                            options=opciones("fami_estratovivienda"),
-                            multi=True,
-                            placeholder="Selecciona estrato(s)",
-),
+                        dcc.Dropdown(id="f_estrato", options=opciones("fami_estratovivienda"), multi=True),
+                    ], style={"width": "30%"}),
+                ],
+                style={
+                    "display": "flex",
+                    "gap": "20px",
+                    "padding": "10px",
+                    "borderBottom": "1px solid #ddd",
+                }
+            ),
 
-                    ],
-                    style={
-                        "width": "25%",
-                        "padding": "16px",
-                        "borderRight": "1px solid #ddd",
-                        "minHeight": "80vh",
-                    },
-                ),
+            # CONTENIDO FULL WIDTH
+            html.Div([
+                html.H3("Resumen"),
+                html.Div(id="resumen"),
 
-                # Contenido principal
-                html.Div(
-                    [
-                        html.H3("Resumen"),
-                        html.Div(id="resumen"),
+                dcc.Graph(id="grafico_q1"),
+                html.Div(id="insight_q1"),
 
-                        html.H3("Puntaje global por colegio bilingüe"),
-                        dcc.Graph(id="grafico_q1"),
-                        html.Div(id="insight_q1", style={"marginTop": "8px", "fontSize": "16px"}),
-                        html.P("Aquí van las pestañas Home / Q1 / Q2 / Q3."),
-                    ],
-                    style={"width": "75%", "padding": "16px"},
-                ),
-            ],
-            style={"display": "flex"},
-        ),
+                dcc.Graph(id="grafico_q1_estrato"),
+                dcc.Graph(id="grafico_q1_pc"),
+
+                dcc.Graph(id="grafico_q1_internet"),
+            ], style={"padding": "20px"})
+
+        ])
     ]
 )
 
+# Callback para filtrar el DataFrame según los dropdowns
 @app.callback(
     Output("df_filtrado", "data"),
     Input("f_anio", "value"),
@@ -117,6 +107,7 @@ def filtrar_df(anios, naturalezas, estratos):
 
     return dff.to_dict("records")
 
+# Callbacks para actualizar resumen, gráficos e insights según el df filtrado
 @app.callback(
     Output("resumen", "children"),
     Input("df_filtrado", "data")
@@ -208,6 +199,68 @@ def insight_q1(data):
         f"(Sí: n={n_si:,} | No: n={n_no:,})."
     )
 
+# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de cada estrato
+@app.callback(
+    Output("grafico_q1_estrato", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_delta_por_estrato(data):
+    dff = pd.DataFrame(data)
+
+    if dff.empty:
+        return px.bar(title="No hay datos con esos filtros")
+
+    req = {"cole_bilingue", "fami_estratovivienda", "punt_global"}
+    if not req.issubset(set(dff.columns)):
+        return px.bar(title="Faltan columnas para calcular diferencia por estrato")
+
+    # Etiquetas Sí/No
+    dff["bilingue_label"] = dff["cole_bilingue"].map({
+        "S": "Sí", "SI": "Sí",
+        "N": "No", "NO": "No"
+    })
+
+    # Promedio por estrato y bilingüe
+    g = (
+        dff.groupby(["fami_estratovivienda", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
+    )
+
+    # Pasar a formato ancho: columnas Sí/No
+    piv = g.pivot(index="fami_estratovivienda", columns="bilingue_label", values="punt_global").reset_index()
+
+    # Si falta alguna columna, no se puede calcular delta en ese estrato
+    if "Sí" not in piv.columns or "No" not in piv.columns:
+        return px.bar(title="Con los filtros actuales no hay comparación Sí vs No por estrato")
+
+    piv["delta"] = piv["Sí"] - piv["No"]
+
+    # Orden bonito de estratos
+    def orden_estrato(x):
+        s = str(x)
+        if "ESTRATO" in s:
+            try:
+                return int(s.split()[-1])
+            except:
+                return 99
+        return 100
+
+    piv["orden"] = piv["fami_estratovivienda"].apply(orden_estrato)
+    piv = piv.sort_values("orden")
+
+    fig = px.bar(
+        piv,
+        x="fami_estratovivienda",
+        y="delta",
+        text=piv["delta"].round(1),
+        title="Diferencia de promedio en puntaje global si el colegio es bilingue dentro de cada estrato",
+        labels={"fami_estratovivienda": "Estrato", "delta": "Diferencia Puntaje global "}
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+
+    return fig
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
 
