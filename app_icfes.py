@@ -95,16 +95,14 @@ app.layout = html.Div(
                         html.H3("Relacion de colegio Bilingüe y puntaje global"),
                         dcc.Graph(id="grafico_q1"),
                         html.Div(id="insight_q1", style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"}),
-
                         dcc.Graph(id="grafico_q1_estrato"),
+                        html.Div([dcc.Graph(id="grafico_q1_pc")], style={"flex": "1"}),
+                        html.Div([dcc.Graph(id="grafico_q1_internet")], style={"flex": "1"}),
                         # luego aquí metemos pc / internet en el siguiente paso
                     ],
                     style={
-                        "marginTop": "12px",
-                        "padding": "12px",
-                        "border": "1px solid #eee",
-                        "borderRadius": "12px",
-                        "backgroundColor": "white",
+                        "marginTop": "12px","padding": "12px","border": "1px solid #eee",
+                        "borderRadius": "12px","backgroundColor": "white", "display": "flex", "flexDirection": "column", "gap": "12px"
                     },
                 ),
             ],
@@ -182,7 +180,7 @@ def actualizar_q1(data):
         resumen,
         x="bilingue_label",
         y="mean",
-        text="mean",
+        text=resumen["mean"].round(0),
         title="Promedio de puntaje global por tipo de colegio bilingüe",
         labels={"bilingue_label": "Colegio bilingüe", "mean": "Promedio puntaje global"},
     )
@@ -291,6 +289,87 @@ def q1_delta_por_estrato(data):
     fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
 
     return fig
+
+# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen computador o no
+@app.callback(
+    Output("grafico_q1_pc", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_delta_pc(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return px.bar(title="No hay datos")
+
+    req = {"cole_bilingue", "fami_tienecomputador", "punt_global"}
+    if not req.issubset(dff.columns):
+        return px.bar(title="Faltan columnas (computador / bilingüe / puntaje)")
+
+    dff["bilingue_label"] = dff["cole_bilingue"].map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"})
+
+    g = (
+        dff.groupby(["fami_tienecomputador", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
+    )
+    piv = g.pivot(index="fami_tienecomputador", columns="bilingue_label", values="punt_global").reset_index()
+
+    if "Sí" not in piv.columns or "No" not in piv.columns:
+        return px.bar(title="No hay comparación suficiente Sí vs No")
+
+    piv["delta"] = piv["Sí"] - piv["No"]
+
+    fig = px.bar(
+        piv,
+        x="fami_tienecomputador",
+        y="delta",
+        text=piv["delta"].round(1),
+        title="Diferencia de puntaje global según computador",
+        labels={"fami_tienecomputador": "Tiene computador", "delta": "Diferencia puntaje global"},
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen internet o no
+@app.callback(
+    Output("grafico_q1_internet", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_delta_internet(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return px.bar(title="No hay datos")
+
+    req = {"cole_bilingue", "fami_tieneinternet", "punt_global"}
+    if not req.issubset(dff.columns):
+        return px.bar(title="Faltan columnas (internet / bilingüe / puntaje)")
+
+    dff["bilingue_label"] = dff["cole_bilingue"].map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"})
+
+    g = (
+        dff.groupby(["fami_tieneinternet", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
+    )
+    piv = g.pivot(index="fami_tieneinternet", columns="bilingue_label", values="punt_global").reset_index()
+
+    if "Sí" not in piv.columns or "No" not in piv.columns:
+        return px.bar(title="No hay comparación suficiente Sí vs No")
+
+    piv["delta"] = piv["Sí"] - piv["No"]
+
+    fig = px.bar(
+        piv,
+        x="fami_tieneinternet",
+        y="delta",
+        text=piv["delta"].round(1),
+        title="Diferencia de puntaje global según internet",
+        labels={"fami_tieneinternet": "Tiene internet", "delta": "Diferencia puntaje global"},
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
 
