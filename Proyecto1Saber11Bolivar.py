@@ -12,10 +12,14 @@ COL_FECHA_NAC = "estu_fechanacimiento"
 COL_PERIODO = "periodo"
 COL_PUNT_GLOBAL = "punt_global"
 COL_COLE_NATURALEZA = "cole_naturaleza"
+COL_COLE_CALENDARIO = "cole_calendario"
+COL_COLE_MCPIO = "cole_mcpio_ubicacion"
 
 Q1_COLS = [
     "cole_bilingue",
     "cole_naturaleza",
+    "cole_calendario",
+    "cole_mcpio_ubicacion",
     "fami_estratovivienda",
     "fami_tienecomputador",
     "fami_tieneinternet",
@@ -27,6 +31,8 @@ Q2_COLS = [
     "cole_genero",
     "cole_caracter",
     "cole_naturaleza",
+    "cole_calendario",
+    "cole_mcpio_ubicacion",
     "fami_estratovivienda",
     "punt_ingles",
     "punt_matematicas",
@@ -42,6 +48,8 @@ Q3_COLS = [
     "cole_area_ubicacion",
     "cole_caracter",
     "cole_naturaleza",
+    "cole_calendario",
+    "cole_mcpio_ubicacion",
     "punt_ingles",
     "punt_matematicas",
     "punt_lectura_critica",
@@ -140,6 +148,8 @@ categ_cols = set([
     "cole_bilingue",
     "cole_area_ubicacion",
     "cole_naturaleza",
+    "cole_calendario",
+    "cole_mcpio_ubicacion",
     "fami_estratovivienda",
     "fami_tienecomputador",
     "fami_tieneinternet",
@@ -229,7 +239,7 @@ df["edad"] = df["edad"].apply(lambda x: int(x) if pd.notna(x) else pd.NA)
 imprimir_reporte_faltantes(df, "df_base_antes_casos_completos")
 
 cols_estudio = list(dict.fromkeys(
-    [COL_ID, "edad", COL_COLE_NATURALEZA] + Q1_COLS + Q2_COLS + Q3_COLS
+    [COL_ID, "edad", COL_COLE_NATURALEZA, COL_COLE_CALENDARIO, COL_COLE_MCPIO] + Q1_COLS + Q2_COLS + Q3_COLS
 ))
 cols_estudio = [c for c in cols_estudio if c in df.columns]
 
@@ -241,15 +251,15 @@ cols_global_final = [c for c in GLOBAL_COLS if c in df_estudio.columns] + ["edad
 cols_global_final = list(dict.fromkeys(cols_global_final))
 df_global = df_estudio[cols_global_final].copy()
 
-cols_q1_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA] + Q1_COLS))
+cols_q1_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA, COL_COLE_CALENDARIO, COL_COLE_MCPIO] + Q1_COLS))
 cols_q1_final = [c for c in cols_q1_final if c in df_estudio.columns]
 df_q1 = df_estudio[cols_q1_final].copy()
 
-cols_q2_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA] + Q2_COLS))
+cols_q2_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA, COL_COLE_CALENDARIO, COL_COLE_MCPIO] + Q2_COLS))
 cols_q2_final = [c for c in cols_q2_final if c in df_estudio.columns]
 df_q2 = df_estudio[cols_q2_final].copy()
 
-cols_q3_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA] + Q3_COLS))
+cols_q3_final = list(dict.fromkeys([COL_ID, "edad", COL_COLE_NATURALEZA, COL_COLE_CALENDARIO, COL_COLE_MCPIO] + Q3_COLS))
 cols_q3_final = [c for c in cols_q3_final if c in df_estudio.columns]
 df_q3 = df_estudio[cols_q3_final].copy()
 
@@ -263,6 +273,8 @@ orden_estudiante = [
 
 orden_colegio = [
     "cole_area_ubicacion",
+    "cole_mcpio_ubicacion",
+    "cole_calendario",
     "cole_bilingue",
     "cole_naturaleza",
     "cole_genero",
@@ -288,10 +300,10 @@ orden_puntajes = [
 
 ordenadas = orden_estudiante + orden_colegio + orden_familia + orden_puntajes
 
-def reordenar_columnas(df):
-    cols_base = [c for c in ordenadas if c in df.columns]
-    cols_restantes = [c for c in df.columns if c not in cols_base]
-    return df[cols_base + cols_restantes]
+def reordenar_columnas(df_):
+    cols_base = [c for c in ordenadas if c in df_.columns]
+    cols_restantes = [c for c in df_.columns if c not in cols_base]
+    return df_[cols_base + cols_restantes]
 
 df_global = reordenar_columnas(df_global)
 df_q1 = reordenar_columnas(df_q1)
@@ -305,3 +317,4 @@ verificar_sin_nulos_y_conteo(df_q3, "df_q3")
 
 print("\nPrimeras filas df_global:")
 print(df_global.head())
+print(df_global.info())
