@@ -1,5 +1,5 @@
 from pathlib import Path
-import dash 
+import dash
 from dash import Input, Output, html, dcc
 import pandas as pd
 import plotly.express as px
@@ -24,6 +24,27 @@ def opciones(col):
 
 # se asegura de que se tiene el año creado
 df["anio"] = (pd.to_numeric(df["periodo"], errors="coerce") // 10).astype("Int64")
+
+# Columnas de puntajes que queremos permitir seleccionar en el dropdown
+Q2_PUNTAJES = {
+    "punt_global": "Global",
+    "punt_matematicas": "Matemáticas",
+    "punt_lectura_critica": "Lectura Crítica",
+    "punt_c_naturales": "C. Naturales",
+    "punt_sociales_ciudadanas": "Sociales",
+    "punt_ingles": "Inglés",
+}
+
+# Lista de años disponibles para construir el slider
+anios_disponibles = sorted(df["anio"].dropna().unique().tolist())
+
+# Creamos un valor "extra" para el slider que represente "Todos los años"
+# El slider necesita valores numéricos, entonces usamos max+1
+ANIO_TODOS = int(max(anios_disponibles)) + 1 if len(anios_disponibles) > 0 else 9999
+
+# Marks del slider: cada año aparece como etiqueta y el último es "Todos"
+marks_anio = {int(a): str(int(a)) for a in anios_disponibles}
+marks_anio[ANIO_TODOS] = "Todos"
 
 # crear app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -180,8 +201,60 @@ def render_tab(tab):
             [
                 html.Div(
                     [
-                        html.H3("Q2: Brecha por género"),
-                        html.P("Aquí vamos a construir las gráficas de brecha por prueba (H vs M)."),
+                        html.H3("Brecha de desempeño por género y por prueba"),
+                        html.P(
+                            "Use el slider para elegir un año específico o todos para todos los años. "
+                            "Use el dropdown para seleccionar qué pruebas desea comparar."
+                        ),
+                        
+                        # CONTROLES Q2
+
+                        html.Div(
+                            [
+                                # Slider de año (como en app3.py)
+                                html.Div(
+                                    [
+                                        html.Label("Año (slider)"),
+                                        dcc.Slider(
+                                            id="q2_year_slider",
+                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                            max=ANIO_TODOS,
+                                            value=ANIO_TODOS,  # por defecto: Todos los años
+                                            marks=marks_anio,
+                                            step=None,  # solo permite escoger valores existentes en marks
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+
+                                # Dropdown multi de pruebas (como app4.py)
+                                html.Div(
+                                    [
+                                        html.Label("Pruebas a mostrar"),
+                                        dcc.Dropdown(
+                                            id="q2_pruebas",
+                                            options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
+                                            value=["punt_global"],     # por defecto solo global
+                                            multi=True,                # permite seleccionar varias pruebas
+                                            placeholder="Seleccione una o varias pruebas",
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        # ============================
+                        # GRÁFICA PRINCIPAL Q2
+                        # ============================
+                        dcc.Graph(id="grafico_q2_brecha"),
+
+                        # Insight textual (opcional, ayuda para el reporte)
+                        html.Div(
+                            id="insight_q2",
+                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
+                        ),
                     ],
                     style={
                         "padding": "12px",
@@ -445,6 +518,100 @@ def q1_delta_internet(data):
     fig.update_traces(textposition="outside")
     fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
     return fig
+
+#Callback Q2
+
+@app.callback(
+    Output("grafico_q2_brecha", "figure"),
+    Output("insight_q2", "children"),
+    Input("df_filtrado", "data"),        # usamos el dataframe ya filtrado por los filtros globales del dashboard
+    Input("q2_year_slider", "value"),    # año seleccionado en el slider
+    Input("q2_pruebas", "value"),        # lista de pruebas seleccionadas en dropdown
+)
+def actualizar_q2_brecha(data, anio_slider, pruebas_sel):
+    """
+    Este callback:
+    1) Reconstruye el dataframe filtrado desde dcc.Store
+    2) Filtra por año (si el slider no está en 'Todos')
+    3) Calcula promedios por género en las pruebas seleccionadas
+    4) Calcula la brecha (Masculino - Femenino)
+    5) Grafica una barra por prueba (o varias si se seleccionan varias)
+    """
+
+    # Convertimos la data (lista de diccionarios) de vuelta a DataFrame
+    dff = pd.DataFrame(data)
+
+    # Si no hay datos, devolvemos una figura vacía
+    if dff.empty:
+        fig = px.bar(title="Sin datos para los filtros seleccionados")
+        return fig, "No hay datos para mostrar con los filtros actuales."
+    
+    # Filtrar por año según el slider
+    # Si el slider está en el valor ANIO_TODOS, NO filtramos por año
+    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
+        dff = dff[dff["anio"] == int(anio_slider)]
+
+    # Si después de filtrar por año quedamos sin datos, devolvemos vacío
+    if dff.empty:
+        fig = px.bar(title="Sin datos para el año seleccionado")
+        return fig, "No hay datos para ese año con los filtros actuales."
+
+
+    #Validar selección de pruebas
+
+    if not pruebas_sel:
+        # Si el usuario no seleccionó nada, por defecto mostramos global
+        pruebas_sel = ["punt_global"]
+
+    # Nos quedamos solo con pruebas válidas que existan en el dataframe
+    pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
+
+    if len(pruebas_sel) == 0:
+        fig = px.bar(title="No hay pruebas seleccionadas válidas")
+        return fig, "Seleccione al menos una prueba válida."
+
+
+    #Calcular brecha por prueba = promedio(M) - promedio(F)
+
+    # Promedios por género
+    promedios = dff.groupby("estu_genero")[pruebas_sel].mean()
+
+    # Asegurar que existen ambos géneros en el subconjunto (M y F)
+    if ("M" not in promedios.index) or ("F" not in promedios.index):
+        fig = px.bar(title="Faltan categorías de género en los datos filtrados")
+        return fig, "No se encuentran ambos géneros en los datos filtrados."
+
+    # Brecha (M - F) por cada columna seleccionada
+    brecha = (promedios.loc["M"] - promedios.loc["F"]).reset_index()
+    brecha.columns = ["prueba", "brecha_M_F"]
+
+    # Etiquetas bonitas para la prueba (para que no se vean nombres tipo punt_...)
+    brecha["prueba"] = brecha["prueba"].map(Q2_PUNTAJES)
+
+    #Gráfica de barras (como app1.py con px.bar)
+    titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+
+    fig = px.bar(
+        brecha,
+        x="prueba",
+        y="brecha_M_F",
+        title=f"Brecha (Masculino - Femenino) por prueba | {titulo_anio}",
+        labels={"prueba": "Prueba", "brecha_M_F": "Brecha (M - F)"},
+    )
+
+    #Insight textual con números exactos (útil para el reporte)
+
+    # Identificamos prueba con mayor brecha y menor brecha
+    max_row = brecha.loc[brecha["brecha_M_F"].idxmax()]
+    min_row = brecha.loc[brecha["brecha_M_F"].idxmin()]
+
+    insight = (
+        f"En {titulo_anio}, la mayor brecha se observa en '{max_row['prueba']}' "
+        f"con {max_row['brecha_M_F']:.2f} puntos. "
+        f"La menor brecha se observa en '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
+    )
+
+    return fig, insight
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
