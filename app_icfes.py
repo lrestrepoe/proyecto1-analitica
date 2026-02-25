@@ -207,9 +207,9 @@ def render_tab(tab):
                             
                         ),
 
-                        # ============================================================
+                       
                         # GRÁFICA 1: BRECHA POR PRUEBA
-                        # ============================================================
+                        
                         html.H4("Diferencia por prueba (Saber 11)"),
 
                         html.Div(
@@ -302,7 +302,7 @@ def render_tab(tab):
                                             options=[],          # se llena dinámicamente
                                             value=[],            # vacío = sin filtro (todos)
                                             multi=True,
-                                            placeholder="Seleccione uno o varios tipos (o deje vacío para todos)",
+                                            placeholder="Seleccione uno o varios tipos",
                                         ),
                                     ],
                                     style={"flex": "1"},
@@ -317,6 +317,71 @@ def render_tab(tab):
                             id="insight_q2_colegio",
                             style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
                         ),
+
+                        # BRECHA POR ESTRATO
+                        
+                        html.Hr(),
+
+                        html.H4("Diferencia por estrato del hogar"),
+
+                        html.Div(
+                            [
+                                # Slider independiente para la gráfica 3
+                                html.Div(
+                                    [
+                                        html.Label("Año"),
+                                        dcc.Slider(
+                                            id="q2_year_slider_estrato",
+                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                            max=ANIO_TODOS,
+                                            value=ANIO_TODOS,  # por defecto: Todos
+                                            marks=marks_anio,
+                                            step=None,
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+
+                                # Dropdown multi de pruebas para gráfica 3
+                                html.Div(
+                                    [
+                                        html.Label("Pruebas a mostrar"),
+                                        dcc.Dropdown(
+                                            id="q2_pruebas_estrato",
+                                            options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
+                                            value=["punt_global"],  # por defecto: Global
+                                            multi=True,
+                                            placeholder="Seleccione una o varias pruebas",
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+
+                                # Dropdown multi para filtrar estratos (se llena dinámicamente)
+                                html.Div(
+                                    [
+                                        html.Label("Filtrar estrato"),
+                                        dcc.Dropdown(
+                                            id="q2_estrato_filtro",
+                                            options=[],   # se llena con callback
+                                            value=[],     # vacío = sin filtro (todos)
+                                            multi=True,
+                                            placeholder="Seleccione uno o varios estratos",
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        dcc.Graph(id="grafico_q2_brecha_estrato"),
+
+                        html.Div(
+                            id="insight_q2_estrato",
+                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
+                        ),
+
                     ],
                     style={
                         "padding": "12px",
@@ -583,8 +648,7 @@ def q1_delta_internet(data):
 
 #Callback Q2
 
-
-# GRÁFICA 1: Brecha (M - F) por prueba y año
+# Gráfica 1: Brecha (M - F) por prueba y año
 
 @app.callback(
     Output("grafico_q2_brecha_pruebas", "figure"),
@@ -642,7 +706,7 @@ def actualizar_q2_brecha_por_prueba(data, anio_slider, pruebas_sel):
         x="prueba",
         y="brecha_M_F",
         title=f"Diferencia (Masculino - Femenino) por prueba | {titulo_anio}",
-        labels={"prueba": "Prueba", "brecha_M_F": "Brecha (M - F)"},
+        labels={"prueba": "Prueba", "brecha_M_F": "Diferencia (M - F)"},
     )
     fig.update_layout(xaxis_tickangle=-45)
 
@@ -681,7 +745,7 @@ def actualizar_opciones_colegio(data):
 
 
 
-#GRÁFICA 2: Brecha por tipo de colegio, año y pruebas
+#Grafica 2: Brecha por tipo de colegio, año y pruebas
 
 
 @app.callback(
@@ -796,6 +860,184 @@ def actualizar_q2_brecha_por_colegio(data, anio_slider, pruebas_sel, colegios_se
         f"con {max_row['brecha_M_F']:.2f} puntos. "
         f"La menor brecha es '{min_row['cole_caracter']}' en '{min_row['prueba']}' "
         f"con {min_row['brecha_M_F']:.2f} puntos."
+    )
+
+    return fig, insight
+
+# Opciones dropdown estrato 
+
+
+@app.callback(
+    Output("q2_estrato_filtro", "options"),
+    Input("df_filtrado", "data"),
+)
+def actualizar_opciones_estrato(data):
+    """
+    Construye las opciones del dropdown de estrato con base en los datos ya filtrados
+    globalmente (df_filtrado).
+    """
+    dff = pd.DataFrame(data)
+
+    # Si no hay datos o no existe la columna de estrato, devolvemos lista vacía
+    if dff.empty or "fami_estratovivienda" not in dff.columns:
+        return []
+
+    # Tomamos estratos únicos, limpiando espacios
+    estratos = dff["fami_estratovivienda"].astype(str).str.strip()
+
+    # Ordenamos alfabéticamente (si quieres orden numérico, lo hacemos luego)
+    opciones = sorted(estratos.dropna().unique().tolist())
+
+    # Formato que espera Dash Dropdown
+    return [{"label": e, "value": e} for e in opciones]
+
+#Grafica 3: Brecha por estrato, año y pruebas
+
+
+@app.callback(
+    Output("grafico_q2_brecha_estrato", "figure"),
+    Output("insight_q2_estrato", "children"),
+    Input("df_filtrado", "data"),            # dataset filtrado global
+    Input("q2_year_slider_estrato", "value"),# slider independiente de esta gráfica
+    Input("q2_pruebas_estrato", "value"),    # pruebas seleccionadas
+    Input("q2_estrato_filtro", "value"),     # filtro opcional de estratos
+)
+def actualizar_q2_brecha_por_estrato(data, anio_slider, pruebas_sel, estratos_sel):
+    """
+    1) Reconstruye df desde df_filtrado
+    2) Filtra por año (si no es 'Todos')
+    3) Filtra por estrato (si el usuario selecciona estratos)
+    4) Calcula promedios por (estrato, género)
+    5) Calcula brecha = M - F por estrato, para cada prueba seleccionada
+    6) Grafica barras agrupadas por estrato y coloreadas por prueba
+    """
+
+    dff = pd.DataFrame(data)
+
+    # Caso sin datos
+    if dff.empty:
+        fig = px.bar(title="Sin datos para los filtros seleccionados")
+        return fig, "No hay datos para mostrar con los filtros actuales."
+
+    # Verificar columnas mínimas necesarias
+    if "fami_estratovivienda" not in dff.columns:
+        fig = px.bar(title="No existe fami_estratovivienda en los datos")
+        return fig, "No se encontró la columna 'fami_estratovivienda' en el dataset del dashboard."
+
+    if "estu_genero" not in dff.columns:
+        fig = px.bar(title="No existe estu_genero en los datos")
+        return fig, "No se encontró la columna 'estu_genero' en el dataset del dashboard."
+
+    # Limpieza mínima de texto para evitar duplicados por espacios
+    dff["fami_estratovivienda"] = dff["fami_estratovivienda"].astype(str).str.strip()
+
+    # Filtrar por año 
+  
+    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
+        dff = dff[dff["anio"] == int(anio_slider)]
+
+    if dff.empty:
+        fig = px.bar(title="Sin datos para el año seleccionado")
+        return fig, "No hay datos para ese año con los filtros actuales."
+
+    
+    # Filtrar por estratos seleccionados 
+    
+    if estratos_sel and len(estratos_sel) > 0:
+        # Normalizamos a string/strip para comparar bien
+        estratos_sel_clean = [str(e).strip() for e in estratos_sel]
+        dff = dff[dff["fami_estratovivienda"].isin(estratos_sel_clean)]
+
+    if dff.empty:
+        fig = px.bar(title="Sin datos para el filtro de estrato seleccionado")
+        return fig, "No hay datos para esos estratos con los filtros actuales."
+
+    
+    # Validar pruebas seleccionadas
+    
+    if not pruebas_sel:
+        pruebas_sel = ["punt_global"]
+
+    # Mantener solo columnas que existen
+    pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
+
+    if len(pruebas_sel) == 0:
+        fig = px.bar(title="No hay pruebas válidas seleccionadas")
+        return fig, "Seleccione al menos una prueba válida."
+
+    
+    # Promedios por (estrato, género) y brecha M - F
+    
+    proms = (
+        dff.groupby(["fami_estratovivienda", "estu_genero"])[pruebas_sel]
+        .mean()
+        .unstack("estu_genero")
+    )
+
+    # Calculamos brecha por prueba: (M - F)
+    brechas = {}
+    for p in pruebas_sel:
+        if (p, "M") in proms.columns and (p, "F") in proms.columns:
+            brechas[p] = proms[(p, "M")] - proms[(p, "F")]
+
+    if len(brechas) == 0:
+        fig = px.bar(title="No se pudo calcular brecha (faltan M/F)")
+        return fig, "No se pudo calcular la brecha: faltan M y/o F en los grupos."
+
+    # Convertimos a formato largo para graficar con color por prueba
+    df_long = (
+        pd.DataFrame(brechas)
+        .reset_index()
+        .melt(id_vars="fami_estratovivienda", var_name="prueba", value_name="brecha_M_F")
+        .dropna()
+    )
+
+    # Nombres bonitos de prueba
+    df_long["prueba"] = df_long["prueba"].map(Q2_PUNTAJES)
+
+    
+    # Orden del eje X (para que se lea mejor)
+    # Ordenamos por la brecha de la primera prueba seleccionada
+    
+    prueba_ref_label = Q2_PUNTAJES.get(pruebas_sel[0], pruebas_sel[0])
+    orden = (
+        df_long[df_long["prueba"] == prueba_ref_label]
+        .sort_values("brecha_M_F")["fami_estratovivienda"]
+        .tolist()
+    )
+    if len(orden) > 0:
+        df_long["fami_estratovivienda"] = pd.Categorical(
+            df_long["fami_estratovivienda"], categories=orden, ordered=True
+        )
+
+    # Construir figura
+    
+    titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+
+    fig = px.bar(
+        df_long,
+        x="fami_estratovivienda",
+        y="brecha_M_F",
+        color="prueba",
+        barmode="group",
+        title=f"Diferencia (Masculino - Femenino) por estrato | {titulo_anio}",
+        labels={
+            "fami_estratovivienda": "Estrato del hogar","brecha_M_F": "Diferecia (M - F)","prueba": "Prueba",
+        },
+    )
+
+    fig.update_layout(xaxis_tickangle=-45)
+
+    # Mínimo y máximo
+
+    max_row = df_long.loc[df_long["brecha_M_F"].idxmax()]
+    min_row = df_long.loc[df_long["brecha_M_F"].idxmin()]
+
+    insight = (
+        f"En {titulo_anio}, la mayor brecha aparece en el '{max_row['fami_estratovivienda']}' "
+        f"para '{max_row['prueba']}' con {max_row['brecha_M_F']:.2f} puntos. "
+        f"La menor brecha aparece en el '{min_row['fami_estratovivienda']}' "
+        f"para '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
     )
 
     return fig, insight
