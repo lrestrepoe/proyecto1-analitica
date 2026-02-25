@@ -201,41 +201,43 @@ def render_tab(tab):
             [
                 html.Div(
                     [
-                        html.H3("Brecha de desempeño por género y por prueba"),
+                        html.H3("Diferencia de desempeño entre mujeres y hombres"),
                         html.P(
-                            "Use el slider para elegir un año específico o todos para todos los años. "
-                            "Use el dropdown para seleccionar qué pruebas desea comparar."
+                            "La diferencia se calcula como (Masculino - Femenino). "
+                            
                         ),
-                        
-                        # CONTROLES Q2
+
+                        # ============================================================
+                        # GRÁFICA 1: BRECHA POR PRUEBA
+                        # ============================================================
+                        html.H4("Diferencia por prueba (Saber 11)"),
 
                         html.Div(
                             [
-                                # Slider de año (como en app3.py)
+                                # Slider independiente para la gráfica 1
                                 html.Div(
                                     [
-                                        html.Label("Año (slider)"),
+                                        html.Label("Año"),
                                         dcc.Slider(
-                                            id="q2_year_slider",
+                                            id="q2_year_slider_prueba",
                                             min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
                                             max=ANIO_TODOS,
-                                            value=ANIO_TODOS,  # por defecto: Todos los años
+                                            value=ANIO_TODOS,
                                             marks=marks_anio,
-                                            step=None,  # solo permite escoger valores existentes en marks
+                                            step=None,
                                         ),
                                     ],
                                     style={"flex": "1"},
                                 ),
-
-                                # Dropdown multi de pruebas (como app4.py)
+                                # Dropdown multi de pruebas para gráfica 1
                                 html.Div(
                                     [
                                         html.Label("Pruebas a mostrar"),
                                         dcc.Dropdown(
                                             id="q2_pruebas",
                                             options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
-                                            value=["punt_global"],     # por defecto solo global
-                                            multi=True,                # permite seleccionar varias pruebas
+                                            value=["punt_global"],
+                                            multi=True,
                                             placeholder="Seleccione una o varias pruebas",
                                         ),
                                     ],
@@ -245,14 +247,74 @@ def render_tab(tab):
                             style={"display": "flex", "gap": "12px", "marginTop": "10px"},
                         ),
 
-                        # ============================
-                        # GRÁFICA PRINCIPAL Q2
-                        # ============================
-                        dcc.Graph(id="grafico_q2_brecha"),
+                        dcc.Graph(id="grafico_q2_brecha_pruebas"),
 
-                        # Insight textual (opcional, ayuda para el reporte)
                         html.Div(
-                            id="insight_q2",
+                            id="insight_q2_pruebas",
+                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
+                        ),
+
+                        html.Hr(),
+
+                        #Grafica 2
+                        html.H4("Diferencia por tipo de colegio"),
+
+                        html.Div(
+                            [
+                                # Slider independiente para la gráfica 2
+                                html.Div(
+                                    [
+                                        html.Label("Año"),
+                                        dcc.Slider(
+                                            id="q2_year_slider_cole",
+                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                            max=ANIO_TODOS,
+                                            value=ANIO_TODOS,
+                                            marks=marks_anio,
+                                            step=None,
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+
+                                # Dropdown multi de pruebas para gráfica 2
+                                html.Div(
+                                    [
+                                        html.Label("Pruebas a mostrar"),
+                                        dcc.Dropdown(
+                                            id="q2_pruebas_cole",
+                                            options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
+                                            value=["punt_global"],
+                                            multi=True,
+                                            placeholder="Seleccione una o varias pruebas",
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+
+                                # Dropdown multi para filtrar tipos de colegio
+                                
+                                html.Div(
+                                    [
+                                        html.Label("Filtrar tipo de colegio"),
+                                        dcc.Dropdown(
+                                            id="q2_cole_filtro",
+                                            options=[],          # se llena dinámicamente
+                                            value=[],            # vacío = sin filtro (todos)
+                                            multi=True,
+                                            placeholder="Seleccione uno o varios tipos (o deje vacío para todos)",
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        dcc.Graph(id="grafico_q2_brecha_colegio"),
+
+                        html.Div(
+                            id="insight_q2_colegio",
                             style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
                         ),
                     ],
@@ -521,94 +583,219 @@ def q1_delta_internet(data):
 
 #Callback Q2
 
-@app.callback(
-    Output("grafico_q2_brecha", "figure"),
-    Output("insight_q2", "children"),
-    Input("df_filtrado", "data"),        # usamos el dataframe ya filtrado por los filtros globales del dashboard
-    Input("q2_year_slider", "value"),    # año seleccionado en el slider
-    Input("q2_pruebas", "value"),        # lista de pruebas seleccionadas en dropdown
-)
-def actualizar_q2_brecha(data, anio_slider, pruebas_sel):
-    """
-    Este callback:
-    1) Reconstruye el dataframe filtrado desde dcc.Store
-    2) Filtra por año (si el slider no está en 'Todos')
-    3) Calcula promedios por género en las pruebas seleccionadas
-    4) Calcula la brecha (Masculino - Femenino)
-    5) Grafica una barra por prueba (o varias si se seleccionan varias)
-    """
 
-    # Convertimos la data (lista de diccionarios) de vuelta a DataFrame
+# GRÁFICA 1: Brecha (M - F) por prueba y año
+
+@app.callback(
+    Output("grafico_q2_brecha_pruebas", "figure"),
+    Output("insight_q2_pruebas", "children"),
+    Input("df_filtrado", "data"),
+    Input("q2_year_slider_prueba", "value"),
+    Input("q2_pruebas", "value"),
+)
+def actualizar_q2_brecha_por_prueba(data, anio_slider, pruebas_sel):
+    """
+    1) Toma el dataframe filtrado global (df_filtrado)
+    2) Filtra por año usando el slider de la gráfica 1
+    3) Calcula promedios por género en las pruebas seleccionadas
+    4) Calcula brecha = promedio(M) - promedio(F)
+    5) Grafica barras por prueba
+    """
     dff = pd.DataFrame(data)
 
-    # Si no hay datos, devolvemos una figura vacía
     if dff.empty:
         fig = px.bar(title="Sin datos para los filtros seleccionados")
         return fig, "No hay datos para mostrar con los filtros actuales."
-    
-    # Filtrar por año según el slider
-    # Si el slider está en el valor ANIO_TODOS, NO filtramos por año
+
+    # Filtrado por año (si no es 'Todos')
     if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
         dff = dff[dff["anio"] == int(anio_slider)]
 
-    # Si después de filtrar por año quedamos sin datos, devolvemos vacío
     if dff.empty:
         fig = px.bar(title="Sin datos para el año seleccionado")
         return fig, "No hay datos para ese año con los filtros actuales."
 
-
-    #Validar selección de pruebas
-
+    # Validación de pruebas
     if not pruebas_sel:
-        # Si el usuario no seleccionó nada, por defecto mostramos global
         pruebas_sel = ["punt_global"]
 
-    # Nos quedamos solo con pruebas válidas que existan en el dataframe
     pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
-
     if len(pruebas_sel) == 0:
-        fig = px.bar(title="No hay pruebas seleccionadas válidas")
+        fig = px.bar(title="No hay pruebas válidas seleccionadas")
         return fig, "Seleccione al menos una prueba válida."
-
-
-    #Calcular brecha por prueba = promedio(M) - promedio(F)
 
     # Promedios por género
     promedios = dff.groupby("estu_genero")[pruebas_sel].mean()
 
-    # Asegurar que existen ambos géneros en el subconjunto (M y F)
     if ("M" not in promedios.index) or ("F" not in promedios.index):
-        fig = px.bar(title="Faltan categorías de género en los datos filtrados")
-        return fig, "No se encuentran ambos géneros en los datos filtrados."
+        fig = px.bar(title="Faltan categorías de género (M/F)")
+        return fig, "No se encuentran ambos géneros (M y F) con los filtros actuales."
 
-    # Brecha (M - F) por cada columna seleccionada
     brecha = (promedios.loc["M"] - promedios.loc["F"]).reset_index()
     brecha.columns = ["prueba", "brecha_M_F"]
-
-    # Etiquetas bonitas para la prueba (para que no se vean nombres tipo punt_...)
     brecha["prueba"] = brecha["prueba"].map(Q2_PUNTAJES)
 
-    #Gráfica de barras (como app1.py con px.bar)
     titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
 
     fig = px.bar(
         brecha,
         x="prueba",
         y="brecha_M_F",
-        title=f"Brecha (Masculino - Femenino) por prueba | {titulo_anio}",
+        title=f"Diferencia (Masculino - Femenino) por prueba | {titulo_anio}",
         labels={"prueba": "Prueba", "brecha_M_F": "Brecha (M - F)"},
     )
+    fig.update_layout(xaxis_tickangle=-45)
 
-    #Insight textual con números exactos (útil para el reporte)
-
-    # Identificamos prueba con mayor brecha y menor brecha
     max_row = brecha.loc[brecha["brecha_M_F"].idxmax()]
     min_row = brecha.loc[brecha["brecha_M_F"].idxmin()]
 
     insight = (
-        f"En {titulo_anio}, la mayor brecha se observa en '{max_row['prueba']}' "
+        f"En {titulo_anio}, la mayor brecha es '{max_row['prueba']}' con {max_row['brecha_M_F']:.2f} puntos. "
+        f"La menor brecha es '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
+    )
+
+    return fig, insight
+
+#Opciones dropdown tipo de colegio (dinámico)
+
+
+@app.callback(
+    Output("q2_cole_filtro", "options"),
+    Input("df_filtrado", "data"),
+)
+def actualizar_opciones_colegio(data):
+    """
+    Construye las opciones del dropdown de tipo de colegio con base en los datos
+    ya filtrados globalmente.
+    """
+    dff = pd.DataFrame(data)
+
+    if dff.empty or "cole_caracter" not in dff.columns:
+        return []
+
+    # Limpieza mínima de texto para evitar duplicados por espacios
+    cole = dff["cole_caracter"].astype(str).str.strip().str.upper()
+
+    opciones = sorted(cole.dropna().unique().tolist())
+    return [{"label": c, "value": c} for c in opciones]
+
+
+
+#GRÁFICA 2: Brecha por tipo de colegio, año y pruebas
+
+
+@app.callback(
+    Output("grafico_q2_brecha_colegio", "figure"),
+    Output("insight_q2_colegio", "children"),
+    Input("df_filtrado", "data"),
+    Input("q2_year_slider_cole", "value"),
+    Input("q2_pruebas_cole", "value"),
+    Input("q2_cole_filtro", "value"),
+)
+def actualizar_q2_brecha_por_colegio(data, anio_slider, pruebas_sel, colegios_sel):
+    """
+    1) Toma df_filtrado
+    2) Filtra por año (slider independiente de gráfica 2)
+    3) Filtra por tipo de colegio si el usuario selecciona valores en dropdown
+    4) Calcula brecha (M - F) por tipo de colegio para cada prueba seleccionada
+    5) Grafica barras agrupadas por colegio (y color por prueba)
+    """
+    dff = pd.DataFrame(data)
+
+    if dff.empty:
+        fig = px.bar(title="Sin datos para los filtros seleccionados")
+        return fig, "No hay datos para mostrar con los filtros actuales."
+
+    # Validación columnas
+    if "cole_caracter" not in dff.columns:
+        fig = px.bar(title="No existe cole_caracter en los datos")
+        return fig, "No se encontró la columna 'cole_caracter' en el dataset del dashboard."
+
+    if "estu_genero" not in dff.columns:
+        fig = px.bar(title="No existe estu_genero en los datos")
+        return fig, "No se encontró la columna 'estu_genero' en el dataset del dashboard."
+
+    # Limpieza mínima de texto para evitar duplicados por espacios
+    dff["cole_caracter"] = dff["cole_caracter"].astype(str).str.strip().str.upper()
+
+    # Filtrar por año (si no es 'Todos')
+    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
+        dff = dff[dff["anio"] == int(anio_slider)]
+
+    if dff.empty:
+        fig = px.bar(title="Sin datos para el año seleccionado")
+        return fig, "No hay datos para ese año con los filtros actuales."
+
+    # Filtrar por tipos de colegio seleccionados (si el usuario escogió alguno)
+    if colegios_sel and len(colegios_sel) > 0:
+        dff = dff[dff["cole_caracter"].isin([str(c).strip().upper() for c in colegios_sel])]
+
+    if dff.empty:
+        fig = px.bar(title="Sin datos para el filtro de colegio seleccionado")
+        return fig, "No hay datos para esos tipos de colegio con los filtros actuales."
+
+    # Validación pruebas
+    if not pruebas_sel:
+        pruebas_sel = ["punt_global"]
+
+    pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
+    if len(pruebas_sel) == 0:
+        fig = px.bar(title="No hay pruebas válidas seleccionadas")
+        return fig, "Seleccione al menos una prueba válida."
+
+    # Promedios por (colegio, género)
+    proms = dff.groupby(["cole_caracter", "estu_genero"])[pruebas_sel].mean().unstack("estu_genero")
+
+    # Brechas por prueba: M - F
+    brechas = {}
+    for p in pruebas_sel:
+        if (p, "M") in proms.columns and (p, "F") in proms.columns:
+            brechas[p] = proms[(p, "M")] - proms[(p, "F")]
+
+    if len(brechas) == 0:
+        fig = px.bar(title="No se pudo calcular brecha (faltan M/F)")
+        return fig, "No se pudo calcular la brecha: faltan M y/o F en los grupos."
+
+    # Formato largo para plotly
+    df_long = (
+        pd.DataFrame(brechas)
+        .reset_index()
+        .melt(id_vars="cole_caracter", var_name="prueba", value_name="brecha_M_F")
+        .dropna()
+    )
+    df_long["prueba"] = df_long["prueba"].map(Q2_PUNTAJES)
+
+    # Orden visual por la primera prueba seleccionada (para que el gráfico se lea mejor)
+    prueba_ref_label = Q2_PUNTAJES.get(pruebas_sel[0], pruebas_sel[0])
+    orden = (
+        df_long[df_long["prueba"] == prueba_ref_label]
+        .sort_values("brecha_M_F")["cole_caracter"]
+        .tolist()
+    )
+    if len(orden) > 0:
+        df_long["cole_caracter"] = pd.Categorical(df_long["cole_caracter"], categories=orden, ordered=True)
+
+    titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+
+    fig = px.bar(
+        df_long,
+        x="cole_caracter",
+        y="brecha_M_F",
+        color="prueba",
+        barmode="group",
+        title=f"Diferencia (Masculino - Femenino) por tipo de colegio | {titulo_anio}",
+        labels={"cole_caracter": "Tipo de colegio", "brecha_M_F": "Diferencia (M - F)", "prueba": "Prueba"},
+    )
+    fig.update_layout(xaxis_tickangle=-45)
+
+    max_row = df_long.loc[df_long["brecha_M_F"].idxmax()]
+    min_row = df_long.loc[df_long["brecha_M_F"].idxmin()]
+
+    insight = (
+        f"En {titulo_anio}, la mayor brecha es '{max_row['cole_caracter']}' en '{max_row['prueba']}' "
         f"con {max_row['brecha_M_F']:.2f} puntos. "
-        f"La menor brecha se observa en '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
+        f"La menor brecha es '{min_row['cole_caracter']}' en '{min_row['prueba']}' "
+        f"con {min_row['brecha_M_F']:.2f} puntos."
     )
 
     return fig, insight
