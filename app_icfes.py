@@ -200,21 +200,42 @@ def render_tab(tab):
                             id="insight_q1",
                             style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
                         ),
-                        html.H4("Mapa (municipios)"),
-                        dcc.Graph(id="mapa_q1_bilingue_delta"),
-
-                        # 2 por fila
                         html.Div(
                             [
                                 html.Div([dcc.Graph(id="grafico_q1_estrato")], style={"flex": "1"}),
                             ],
                             style={"display": "flex", "gap": "12px", "marginTop": "10px"},
                         ),
-
                         html.Div(
                             [
                                 html.Div([dcc.Graph(id="grafico_q1_internet")], style={"flex": "1"}),
                                 html.Div([dcc.Graph(id="grafico_q1_pc")], style={"flex": "1"}),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        html.Hr(style={"marginTop": "14px", "marginBottom": "10px"}),
+
+                        html.H4("Gráficas adicionales", style={"marginTop": "0px"}),
+
+                        html.Div(
+                            [
+                                html.Div([dcc.Graph(id="grafico_q1_box_estrato")], style={"flex": "1"}),
+                                html.Div([dcc.Graph(id="grafico_q1_heatmap")], style={"flex": "1"}),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        html.Div(
+                            [
+                                html.Div([dcc.Graph(id="grafico_q1_scatter_matrix")], style={"flex": "1"}),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        html.Div(
+                            [
+                                html.Div([dcc.Graph(id="grafico_q1_burbujas_mcpio")], style={"flex": "1"}),
                             ],
                             style={"display": "flex", "gap": "12px", "marginTop": "10px"},
                         ),
@@ -491,7 +512,6 @@ def render_tab(tab):
         )
 
     return html.Div("Selecciona una pestaña.")
-
 # Callbacks para actualizar resumen, gráficos e insights según el df filtrado
 @app.callback(
     Output("resumen", "children"),
@@ -504,20 +524,74 @@ def mostrar_resumen(data):
 
     return f"Filas: {len(dff):,} | Promedio: {dff['punt_global'].mean():.2f}"
 
-#Grafico Q1: puntaje global por colegio bilingüe
+def _q1_estilo(fig, height=None, margin=None, font_size=14):
+    fig.update_layout(template="plotly_white", font=dict(size=font_size), title_x=0.02)
+    if height is not None:
+        fig.update_layout(height=height)
+    if margin is not None:
+        fig.update_layout(margin=margin)
+    return fig
+
+def _q1_fig_vacia(titulo):
+    return _q1_estilo(px.bar(title=titulo), height=450)
+
+def _q1_si_no(v):
+    v = str(v).strip().upper()
+    if v in ["SI", "S", "TRUE", "1"]:
+        return "SI"
+    if v in ["NO", "N", "FALSE", "0"]:
+        return "NO"
+    return v
+
+def _q1_b_label_B_NB(series):
+    s = series.astype(str).str.strip().str.upper()
+    return s.map({"S": "B", "SI": "B", "N": "NB", "NO": "NB"}).fillna(series)
+
+def _q1_b_label_Si_No(series):
+    s = series.astype(str).str.strip().str.upper()
+    return s.map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"}).fillna(series)
+
+def _q1_orden_estratos(serie):
+    base = ["SIN ESTRATO", "ESTRATO 1", "ESTRATO 2", "ESTRATO 3", "ESTRATO 4", "ESTRATO 5", "ESTRATO 6"]
+    vals = serie.astype(str).str.strip().str.upper()
+    presentes = [e for e in base if e in set(vals)]
+    return presentes if len(presentes) else sorted(vals.unique().tolist())
+
+def _q1_acceso_digital(dff):
+    internet = dff["fami_tieneinternet"].apply(_q1_si_no)
+    computador = dff["fami_tienecomputador"].apply(_q1_si_no)
+
+    def comb(i, c):
+        if i == "SI" and c == "SI":
+            return "Internet y computador"
+        if i == "SI" and c == "NO":
+            return "Solo internet"
+        if i == "NO" and c == "SI":
+            return "Solo computador"
+        return "Sin internet y sin computador"
+
+    return [comb(i, c) for i, c in zip(internet, computador)]
+
+
 @app.callback(
     Output("grafico_q1", "figure"),
     Input("df_filtrado", "data")
 )
 def actualizar_q1(data):
     dff = pd.DataFrame(data)
-    if dff.empty or "cole_bilingue" not in dff.columns:
-        return px.bar(title="No hay datos")
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos")
 
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global"])
+    if "cole_bilingue" not in dff.columns:
+        return _q1_fig_vacia("No existe columna cole_bilingue")
 
-    resumen = mean_by(dff, "bilingue_label", "punt_global")
+    dff["bilingue_label"] = _q1_b_label_Si_No(dff["cole_bilingue"])
+
+    resumen = (
+        dff.groupby("bilingue_label")["punt_global"]
+        .agg(["mean", "count", "std"])
+        .reset_index()
+    )
 
     fig = px.bar(
         resumen,
@@ -527,108 +601,369 @@ def actualizar_q1(data):
         title="Promedio de puntaje global por tipo de colegio bilingüe",
         labels={"bilingue_label": "Colegio bilingüe", "mean": "Promedio puntaje global"},
     )
+
     fig.update_traces(textposition="outside")
     fig.update_layout(yaxis_range=[0, 500])
-    return fig
+
+    return _q1_estilo(fig, height=450)
 
 
-# Insight Q1: diferencia en puntaje global entre colegios bilingües y no bilingües
 @app.callback(
     Output("insight_q1", "children"),
     Input("df_filtrado", "data")
 )
 def insight_q1(data):
     dff = pd.DataFrame(data)
-    if dff.empty or not {"cole_bilingue", "punt_global"}.issubset(dff.columns):
+    if dff.empty or "cole_bilingue" not in dff.columns or "punt_global" not in dff.columns:
         return "No hay suficiente información para calcular la diferencia."
 
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global"])
+    dff["bilingue_label"] = _q1_b_label_Si_No(dff["cole_bilingue"])
 
     prom = dff.groupby("bilingue_label")["punt_global"].mean()
     if ("Sí" not in prom.index) or ("No" not in prom.index):
-        return "Con los filtros actuales no hay datos para comparar 'Sí' vs 'No'."
+        return "Con los filtros actuales no hay datos para comparar Sí vs No."
 
     diff = prom["Sí"] - prom["No"]
     n_si = (dff["bilingue_label"] == "Sí").sum()
     n_no = (dff["bilingue_label"] == "No").sum()
-    signo = "más" if diff >= 0 else "menos"
 
+    signo = "más" if diff >= 0 else "menos"
     return (
         f"Los estudiantes de colegios bilingües obtienen en promedio "
         f"{abs(diff):.1f} puntos {signo} en puntaje global que los de colegios no bilingües "
         f"(Sí: n={n_si:,} | No: n={n_no:,})."
     )
 
-# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de cada estrato
+
 @app.callback(
     Output("grafico_q1_estrato", "figure"),
     Input("df_filtrado", "data")
 )
 def q1_delta_por_estrato(data):
     dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos con esos filtros")
+
     req = {"cole_bilingue", "fami_estratovivienda", "punt_global"}
-    if dff.empty or not req.issubset(dff.columns):
-        return px.bar(title="No hay datos / faltan columnas")
+    if not req.issubset(set(dff.columns)):
+        return _q1_fig_vacia("Faltan columnas para calcular diferencia por estrato")
 
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_estratovivienda"])
+    dff["bilingue_label"] = _q1_b_label_Si_No(dff["cole_bilingue"])
 
-    piv = delta_yes_no(dff, "fami_estratovivienda", "bilingue_label", "punt_global")
-    piv = order_estrato_like(piv, "fami_estratovivienda")
-
-    return fig_delta_bar(
-        piv,
-        x_col="fami_estratovivienda",
-        title="Diferencia de puntaje global (Bilingüe Sí - No) por estrato",
-        x_label="Estrato",
+    g = (
+        dff.groupby(["fami_estratovivienda", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
     )
 
-# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen computador o no
+    piv = g.pivot(index="fami_estratovivienda", columns="bilingue_label", values="punt_global").reset_index()
+    if "Sí" not in piv.columns or "No" not in piv.columns:
+        return _q1_fig_vacia("Con los filtros actuales no hay comparación Sí vs No por estrato")
+
+    piv["delta"] = piv["Sí"] - piv["No"]
+
+    def orden_estrato(x):
+        s = str(x)
+        if "ESTRATO" in s:
+            try:
+                return int(s.split()[-1])
+            except:
+                return 99
+        return 100
+
+    piv["orden"] = piv["fami_estratovivienda"].apply(orden_estrato)
+    piv = piv.sort_values("orden")
+
+    fig = px.bar(
+        piv,
+        x="fami_estratovivienda",
+        y="delta",
+        text=piv["delta"].round(1),
+        title="Diferencia de promedio en puntaje global si el colegio es bilingue dentro de cada estrato",
+        labels={"fami_estratovivienda": "Estrato", "delta": "Diferencia puntaje global"}
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+
+    return _q1_estilo(fig, height=420)
+
+
 @app.callback(
     Output("grafico_q1_pc", "figure"),
     Input("df_filtrado", "data")
 )
 def q1_delta_pc(data):
     dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos")
+
     req = {"cole_bilingue", "fami_tienecomputador", "punt_global"}
-    if dff.empty or not req.issubset(dff.columns):
-        return px.bar(title="No hay datos / faltan columnas")
+    if not req.issubset(dff.columns):
+        return _q1_fig_vacia("Faltan columnas (computador / bilingüe / puntaje)")
 
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_tienecomputador"])
+    dff["bilingue_label"] = _q1_b_label_Si_No(dff["cole_bilingue"])
 
-    piv = delta_yes_no(dff, "fami_tienecomputador", "bilingue_label", "punt_global")
-
-    return fig_delta_bar(
-        piv,
-        x_col="fami_tienecomputador",
-        title="Diferencia de puntaje global (Bilingüe Sí - No) según computador",
-        x_label="Tiene computador",
+    g = (
+        dff.groupby(["fami_tienecomputador", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
     )
-    
-# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen internet o no
+    piv = g.pivot(index="fami_tienecomputador", columns="bilingue_label", values="punt_global").reset_index()
+
+    if "Sí" not in piv.columns or "No" not in piv.columns:
+        return _q1_fig_vacia("No hay comparación suficiente Sí vs No")
+
+    piv["delta"] = piv["Sí"] - piv["No"]
+
+    fig = px.bar(
+        piv,
+        x="fami_tienecomputador",
+        y="delta",
+        text=piv["delta"].round(1),
+        title="Diferencia de puntaje global según computador",
+        labels={"fami_tienecomputador": "Tiene computador", "delta": "Diferencia puntaje global"},
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+    return _q1_estilo(fig, height=420)
+
+
 @app.callback(
     Output("grafico_q1_internet", "figure"),
     Input("df_filtrado", "data")
 )
 def q1_delta_internet(data):
     dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos")
+
     req = {"cole_bilingue", "fami_tieneinternet", "punt_global"}
-    if dff.empty or not req.issubset(dff.columns):
-        return px.bar(title="No hay datos / faltan columnas")
+    if not req.issubset(dff.columns):
+        return _q1_fig_vacia("Faltan columnas (internet / bilingüe / puntaje)")
 
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_tieneinternet"])
+    dff["bilingue_label"] = _q1_b_label_Si_No(dff["cole_bilingue"])
 
-    piv = delta_yes_no(dff, "fami_tieneinternet", "bilingue_label", "punt_global")
-
-    return fig_delta_bar(
-        piv,
-        x_col="fami_tieneinternet",
-        title="Diferencia de puntaje global (Bilingüe Sí - No) según internet",
-        x_label="Tiene internet",
+    g = (
+        dff.groupby(["fami_tieneinternet", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
     )
+    piv = g.pivot(index="fami_tieneinternet", columns="bilingue_label", values="punt_global").reset_index()
+
+    if "Sí" not in piv.columns or "No" not in piv.columns:
+        return _q1_fig_vacia("No hay comparación suficiente Sí vs No")
+
+    piv["delta"] = piv["Sí"] - piv["No"]
+
+    fig = px.bar(
+        piv,
+        x="fami_tieneinternet",
+        y="delta",
+        text=piv["delta"].round(1),
+        title="Diferencia de puntaje global según internet",
+        labels={"fami_tieneinternet": "Tiene internet", "delta": "Diferencia puntaje global"},
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+    return _q1_estilo(fig, height=420)
+
+
+@app.callback(
+    Output("grafico_q1_box_estrato", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_extra_box_estrato(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos con esos filtros")
+
+    req = {"cole_bilingue", "fami_estratovivienda", "punt_global"}
+    if not req.issubset(set(dff.columns)):
+        return _q1_fig_vacia("Faltan columnas para el boxplot")
+
+    dff["b_label"] = _q1_b_label_B_NB(dff["cole_bilingue"])
+    dff["estrato_label"] = dff["fami_estratovivienda"].astype(str).str.strip().str.upper()
+    estrato_order = _q1_orden_estratos(dff["estrato_label"])
+
+    fig = px.box(
+        dff,
+        x="estrato_label",
+        y="punt_global",
+        color="b_label",
+        points=False,
+        category_orders={"estrato_label": estrato_order, "b_label": ["NB", "B"]},
+        labels={"estrato_label": "Estrato de la vivienda", "punt_global": "Puntaje global", "b_label": "Colegio"},
+        title="Puntaje global por estrato comparando B y NB"
+    )
+    fig.update_layout(boxmode="group")
+    return _q1_estilo(fig, height=520)
+
+
+@app.callback(
+    Output("grafico_q1_heatmap", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_extra_heatmap(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos con esos filtros")
+
+    req = {"cole_bilingue", "fami_estratovivienda", "fami_tieneinternet", "fami_tienecomputador", "punt_global"}
+    if not req.issubset(set(dff.columns)):
+        return _q1_fig_vacia("Faltan columnas para el mapa de calor")
+
+    dff["b_label"] = _q1_b_label_B_NB(dff["cole_bilingue"])
+    dff["estrato_label"] = dff["fami_estratovivienda"].astype(str).str.strip().str.upper()
+    dff["acceso_digital"] = _q1_acceso_digital(dff)
+
+    estrato_order = _q1_orden_estratos(dff["estrato_label"])
+    acceso_order = ["Sin internet y sin computador", "Solo internet", "Solo computador", "Internet y computador"]
+
+    medianas = (
+        dff.groupby(["estrato_label", "acceso_digital", "b_label"], as_index=False)["punt_global"]
+        .median()
+    )
+
+    pivot = medianas.pivot_table(
+        index=["estrato_label"],
+        columns=["acceso_digital", "b_label"],
+        values="punt_global",
+        aggfunc="median"
+    )
+
+    if ("B" not in pivot.columns.get_level_values(1)) or ("NB" not in pivot.columns.get_level_values(1)):
+        return _q1_fig_vacia("No hay comparación suficiente B vs NB")
+
+    diff = (
+        pivot.xs("B", axis=1, level=1) -
+        pivot.xs("NB", axis=1, level=1)
+    ).reindex(index=estrato_order).reindex(columns=acceso_order)
+
+    fig = px.imshow(
+        diff,
+        text_auto=".1f",
+        aspect="auto",
+        labels=dict(x="Acceso digital en el hogar", y="Estrato", color="Diferencia de mediana"),
+        title="Ventaja B sobre NB por estrato y acceso digital"
+    )
+    return _q1_estilo(fig, height=520)
+
+
+@app.callback(
+    Output("grafico_q1_scatter_matrix", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_extra_scatter_matrix(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos con esos filtros")
+
+    req = {
+        "punt_ingles",
+        "punt_matematicas",
+        "punt_lectura_critica",
+        "punt_c_naturales",
+        "punt_sociales_ciudadanas",
+        "punt_global",
+        "cole_bilingue"
+    }
+    if not req.issubset(set(dff.columns)):
+        return _q1_fig_vacia("Faltan columnas para la matriz de dispersión")
+
+    dff["b_label"] = _q1_b_label_B_NB(dff["cole_bilingue"])
+
+    n_sample = 8000
+    dff_sm = dff.sample(n=min(len(dff), n_sample), random_state=42)
+
+    labels_sm = {
+        "punt_ingles": "Inglés",
+        "punt_matematicas": "Matemáticas",
+        "punt_lectura_critica": "L. Crítica",
+        "punt_c_naturales": "C. naturales",
+        "punt_sociales_ciudadanas": "Sociales",
+        "punt_global": "Global",
+        "b_label": "Colegio",
+    }
+
+    fig = px.scatter_matrix(
+        dff_sm,
+        dimensions=[
+            "punt_ingles",
+            "punt_matematicas",
+            "punt_lectura_critica",
+            "punt_c_naturales",
+            "punt_sociales_ciudadanas",
+            "punt_global",
+        ],
+        color="b_label",
+        opacity=0.55,
+        labels=labels_sm,
+        title="Matriz de dispersión de puntajes comparando B y NB"
+    )
+
+    fig.update_traces(diagonal_visible=False, marker=dict(size=4))
+    fig.update_layout(margin=dict(l=140, r=40, t=80, b=60), height=750, template="plotly_white", font=dict(size=13), title_x=0.02)
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
+
+    return fig
+
+
+@app.callback(
+    Output("grafico_q1_burbujas_mcpio", "figure"),
+    Input("df_filtrado", "data")
+)
+def q1_extra_burbujas_mcpio(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return _q1_fig_vacia("No hay datos con esos filtros")
+
+    req = {"cole_mcpio_ubicacion", "punt_global", "cole_bilingue"}
+    if not req.issubset(set(dff.columns)):
+        return _q1_fig_vacia("Faltan columnas para municipio")
+
+    dff["b_bin"] = dff["cole_bilingue"].astype(str).str.strip().str.upper().isin(["S", "SI"]).astype(int)
+
+    mun = (
+        dff.groupby("cole_mcpio_ubicacion")
+        .agg(
+            puntaje_promedio=("punt_global", "mean"),
+            n_estudiantes=("punt_global", "size"),
+            prop_b=("b_bin", "mean")
+        )
+        .reset_index()
+    )
+
+    if mun.empty:
+        return _q1_fig_vacia("No hay datos para municipios")
+
+    umbral = 50
+    mun_fil = mun[mun["n_estudiantes"] >= umbral].copy()
+    if mun_fil.empty:
+        mun_fil = mun[mun["n_estudiantes"] >= 20].copy()
+    if mun_fil.empty:
+        mun_fil = mun.copy()
+
+    mun_fil = mun_fil.sort_values("puntaje_promedio", ascending=False)
+
+    fig = px.scatter(
+        mun_fil,
+        x="puntaje_promedio",
+        y="n_estudiantes",
+        size="puntaje_promedio",
+        color="prop_b",
+        hover_name="cole_mcpio_ubicacion",
+        hover_data={"puntaje_promedio": ":.1f", "n_estudiantes": True, "prop_b": ":.2f"},
+        labels={
+            "puntaje_promedio": "Puntaje global promedio",
+            "n_estudiantes": "Número de estudiantes",
+            "prop_b": "Proporción B"
+        },
+        title="Puntaje global promedio por municipio"
+    )
+    fig.update_traces(marker=dict(opacity=0.75), selector=dict(mode="markers"))
+    fig.update_layout(coloraxis_colorbar=dict(title="Proporción B"))
+    return _q1_estilo(fig, height=520)
 
 #Callback Q2
 
