@@ -1,5 +1,8 @@
 # src/helpers.py
 import pandas as pd
+from typing import Optional, List, Dict
+import plotly.express as px
+
 
 BINARY_SINO = {"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"}
 
@@ -140,3 +143,83 @@ def build_insight_maxmin(df_long: pd.DataFrame, group_col: str | None = None) ->
         f"La mayor brecha es '{max_row[group_col]}' en '{max_row['prueba']}' con {max_row['brecha_M_F']:.2f} puntos. "
         f"La menor brecha es '{min_row[group_col]}' en '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
     )
+
+def build_dropdown_options(dff: pd.DataFrame, col: str, upper: bool = False) -> List[Dict[str, str]]:
+    """Construye options para dropdown a partir de una columna (limpia espacios, opcional upper)."""
+    if dff.empty or col not in dff.columns:
+        return []
+    s = dff[col].astype(str).str.strip()
+    if upper:
+        s = s.str.upper()
+    vals = sorted(s.dropna().unique().tolist())
+    return [{"label": v, "value": v} for v in vals]
+
+def delta_yes_no(
+    dff: pd.DataFrame,
+    group_col: str,
+    yesno_col: str,
+    value_col: str,
+    yes_label: str = "Sí",
+    no_label: str = "No",
+) -> pd.DataFrame:
+    """
+    Calcula delta = promedio(yes_label) - promedio(no_label) por group_col.
+    Devuelve DF con columnas: group_col, Sí, No, delta (si existen).
+    """
+    if dff.empty:
+        return pd.DataFrame()
+
+    g = (
+        dff.groupby([group_col, yesno_col])[value_col]
+        .mean()
+        .reset_index()
+    )
+    piv = g.pivot(index=group_col, columns=yesno_col, values=value_col).reset_index()
+
+    if yes_label in piv.columns and no_label in piv.columns:
+        piv["delta"] = piv[yes_label] - piv[no_label]
+    else:
+        piv["delta"] = pd.NA
+
+    return piv
+
+def fig_delta_bar(piv: pd.DataFrame, x_col: str, title: str, x_label: str) -> "px.Figure":
+    """Figura estándar para delta."""
+    if piv is None or piv.empty or "delta" not in piv.columns:
+        return px.bar(title="No hay datos para graficar")
+
+    fig = px.bar(
+        piv,
+        x=x_col,
+        y="delta",
+        text=piv["delta"].round(1),
+        title=title,
+        labels={x_col: x_label, "delta": "Diferencia (Sí - No)"},
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+def order_estrato_like(piv: pd.DataFrame, col: str) -> pd.DataFrame:
+    """Ordena estrato tipo 'ESTRATO 1..6' si aplica."""
+    if piv is None or piv.empty or col not in piv.columns:
+        return piv
+
+    def _ord(x):
+        s = str(x).upper()
+        if "ESTRATO" in s:
+            try:
+                return int(s.split()[-1])
+            except Exception:
+                return 99
+        return 100
+
+    piv = piv.copy()
+    piv["_orden"] = piv[col].apply(_ord)
+    piv = piv.sort_values("_orden").drop(columns=["_orden"])
+    return piv
+
+
+#Cosas para hacer en helpers.py:
+
+#reduce líneas es sacar el bloque de geojson_norm fuera del callback del mapa (para no reconstruirlo en cada interacción). Te digo cómo dejarlo cacheado arriba (se nota en velocidad también).

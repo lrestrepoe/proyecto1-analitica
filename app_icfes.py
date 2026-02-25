@@ -5,9 +5,9 @@ from dash import Input, Output, html, dcc
 import pandas as pd
 import plotly.express as px
 import unicodedata
-from src.helpers import map_sino, mean_by, apply_year_filter, brecha_genero_long, build_insight_maxmin
-
-
+from src.helpers import (build_dropdown_options, map_sino, mean_by, apply_year_filter, 
+                         brecha_genero_long, build_insight_maxmin, delta_yes_no, fig_delta_bar, order_estrato_like) 
+                            
 
 # Cargar el DataFrame global desde un archivo Parquet
 BASE_DIR = Path(__file__).resolve().parent
@@ -514,6 +514,7 @@ def actualizar_q1(data):
     fig.update_layout(yaxis_range=[0, 500])
     return fig
 
+
 # Insight Q1: diferencia en puntaje global entre colegios bilingües y no bilingües
 @app.callback(
     Output("insight_q1", "children"),
@@ -549,57 +550,22 @@ def insight_q1(data):
 )
 def q1_delta_por_estrato(data):
     dff = pd.DataFrame(data)
-
-    if dff.empty:
-        return px.bar(title="No hay datos con esos filtros")
-
     req = {"cole_bilingue", "fami_estratovivienda", "punt_global"}
-    if not req.issubset(set(dff.columns)):
-        return px.bar(title="Faltan columnas para calcular diferencia por estrato")
+    if dff.empty or not req.issubset(dff.columns):
+        return px.bar(title="No hay datos / faltan columnas")
 
     dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    
-    # Promedio por estrato y bilingüe
-    g = (
-        dff.groupby(["fami_estratovivienda", "bilingue_label"])["punt_global"]
-        .mean()
-        .reset_index()
-    )
+    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_estratovivienda"])
 
-    # Pasar a formato ancho: columnas Sí/No
-    piv = g.pivot(index="fami_estratovivienda", columns="bilingue_label", values="punt_global").reset_index()
+    piv = delta_yes_no(dff, "fami_estratovivienda", "bilingue_label", "punt_global")
+    piv = order_estrato_like(piv, "fami_estratovivienda")
 
-    # Si falta alguna columna, no se puede calcular delta en ese estrato
-    if "Sí" not in piv.columns or "No" not in piv.columns:
-        return px.bar(title="Con los filtros actuales no hay comparación Sí vs No por estrato")
-
-    piv["delta"] = piv["Sí"] - piv["No"]
-
-    # Orden bonito de estratos
-    def orden_estrato(x):
-        s = str(x)
-        if "ESTRATO" in s:
-            try:
-                return int(s.split()[-1])
-            except:
-                return 99
-        return 100
-
-    piv["orden"] = piv["fami_estratovivienda"].apply(orden_estrato)
-    piv = piv.sort_values("orden")
-
-    fig = px.bar(
+    return fig_delta_bar(
         piv,
-        x="fami_estratovivienda",
-        y="delta",
-        text=piv["delta"].round(1),
-        title="Diferencia de promedio en puntaje global si el colegio es bilingue dentro de cada estrato",
-        labels={"fami_estratovivienda": "Estrato", "delta": "Diferencia Puntaje global "}
+        x_col="fami_estratovivienda",
+        title="Diferencia de puntaje global (Bilingüe Sí - No) por estrato",
+        x_label="Estrato",
     )
-    fig.update_traces(textposition="outside")
-    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
-
-    return fig
 
 # Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen computador o no
 @app.callback(
@@ -608,39 +574,22 @@ def q1_delta_por_estrato(data):
 )
 def q1_delta_pc(data):
     dff = pd.DataFrame(data)
-    if dff.empty:
-        return px.bar(title="No hay datos")
-
     req = {"cole_bilingue", "fami_tienecomputador", "punt_global"}
-    if not req.issubset(dff.columns):
-        return px.bar(title="Faltan columnas (computador / bilingüe / puntaje)")
+    if dff.empty or not req.issubset(dff.columns):
+        return px.bar(title="No hay datos / faltan columnas")
 
-    dff["bilingue_label"] = dff["cole_bilingue"].map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"})
+    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
+    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_tienecomputador"])
 
-    g = (
-        dff.groupby(["fami_tienecomputador", "bilingue_label"])["punt_global"]
-        .mean()
-        .reset_index()
-    )
-    piv = g.pivot(index="fami_tienecomputador", columns="bilingue_label", values="punt_global").reset_index()
+    piv = delta_yes_no(dff, "fami_tienecomputador", "bilingue_label", "punt_global")
 
-    if "Sí" not in piv.columns or "No" not in piv.columns:
-        return px.bar(title="No hay comparación suficiente Sí vs No")
-
-    piv["delta"] = piv["Sí"] - piv["No"]
-
-    fig = px.bar(
+    return fig_delta_bar(
         piv,
-        x="fami_tienecomputador",
-        y="delta",
-        text=piv["delta"].round(1),
-        title="Diferencia de puntaje global según computador",
-        labels={"fami_tienecomputador": "Tiene computador", "delta": "Diferencia puntaje global"},
+        x_col="fami_tienecomputador",
+        title="Diferencia de puntaje global (Bilingüe Sí - No) según computador",
+        x_label="Tiene computador",
     )
-    fig.update_traces(textposition="outside")
-    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
-    return fig
-
+    
 # Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen internet o no
 @app.callback(
     Output("grafico_q1_internet", "figure"),
@@ -648,38 +597,21 @@ def q1_delta_pc(data):
 )
 def q1_delta_internet(data):
     dff = pd.DataFrame(data)
-    if dff.empty:
-        return px.bar(title="No hay datos")
-
     req = {"cole_bilingue", "fami_tieneinternet", "punt_global"}
-    if not req.issubset(dff.columns):
-        return px.bar(title="Faltan columnas (internet / bilingüe / puntaje)")
+    if dff.empty or not req.issubset(dff.columns):
+        return px.bar(title="No hay datos / faltan columnas")
 
-    dff["bilingue_label"] = dff["cole_bilingue"].map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"})
+    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
+    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_tieneinternet"])
 
-    g = (
-        dff.groupby(["fami_tieneinternet", "bilingue_label"])["punt_global"]
-        .mean()
-        .reset_index()
-    )
-    piv = g.pivot(index="fami_tieneinternet", columns="bilingue_label", values="punt_global").reset_index()
+    piv = delta_yes_no(dff, "fami_tieneinternet", "bilingue_label", "punt_global")
 
-    if "Sí" not in piv.columns or "No" not in piv.columns:
-        return px.bar(title="No hay comparación suficiente Sí vs No")
-
-    piv["delta"] = piv["Sí"] - piv["No"]
-
-    fig = px.bar(
+    return fig_delta_bar(
         piv,
-        x="fami_tieneinternet",
-        y="delta",
-        text=piv["delta"].round(1),
-        title="Diferencia de puntaje global según internet",
-        labels={"fami_tieneinternet": "Tiene internet", "delta": "Diferencia puntaje global"},
+        x_col="fami_tieneinternet",
+        title="Diferencia de puntaje global (Bilingüe Sí - No) según internet",
+        x_label="Tiene internet",
     )
-    fig.update_traces(textposition="outside")
-    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
-    return fig
 
 #Callback Q2
 
@@ -706,7 +638,9 @@ def actualizar_q2_brecha_por_prueba(data, anio_slider, pruebas_sel):
         return px.bar(title="No se pudo calcular brecha"), "No se encuentran ambos géneros (M y F) o pruebas válidas."
 
     fig = px.bar(
-        brecha, x="prueba", y="brecha_M_F",
+        brecha,
+        x="prueba",
+        y="brecha_M_F",
         title=f"Diferencia (Masculino - Femenino) por prueba | {titulo_anio}",
         labels={"prueba": "Prueba", "brecha_M_F": "Diferencia (M - F)"},
     )
@@ -721,22 +655,9 @@ def actualizar_q2_brecha_por_prueba(data, anio_slider, pruebas_sel):
     Input("df_filtrado", "data"),
 )
 def actualizar_opciones_colegio(data):
-    """
-    Construye las opciones del dropdown de tipo de colegio con base en los datos
-    ya filtrados globalmente.
-    """
     dff = pd.DataFrame(data)
-
-    if dff.empty or "cole_caracter" not in dff.columns:
-        return []
-
-    # Limpieza mínima de texto para evitar duplicados por espacios
-    cole = dff["cole_caracter"].astype(str).str.strip().str.upper()
-
-    opciones = sorted(cole.dropna().unique().tolist())
-    return [{"label": c, "value": c} for c in opciones]
-
-
+    # upper=True para que no duplique por minúsculas/espacios
+    return build_dropdown_options(dff, "cole_caracter", upper=True)
 
 #Grafica 2: Brecha por tipo de colegio, año y pruebas
 @app.callback(
@@ -752,7 +673,7 @@ def actualizar_q2_brecha_por_colegio(data, anio_slider, pruebas_sel, colegios_se
     if dff.empty:
         return px.bar(title="Sin datos"), "No hay datos para mostrar con los filtros actuales."
 
-    # limpieza de colegio (como ya hacías)
+    # normaliza colegio
     if "cole_caracter" in dff.columns:
         dff["cole_caracter"] = dff["cole_caracter"].astype(str).str.strip().str.upper()
 
@@ -792,24 +713,8 @@ def actualizar_q2_brecha_por_colegio(data, anio_slider, pruebas_sel, colegios_se
     Input("df_filtrado", "data"),
 )
 def actualizar_opciones_estrato(data):
-    """
-    Construye las opciones del dropdown de estrato con base en los datos ya filtrados
-    globalmente (df_filtrado).
-    """
     dff = pd.DataFrame(data)
-
-    # Si no hay datos o no existe la columna de estrato, devolvemos lista vacía
-    if dff.empty or "fami_estratovivienda" not in dff.columns:
-        return []
-
-    # Tomamos estratos únicos, limpiando espacios
-    estratos = dff["fami_estratovivienda"].astype(str).str.strip()
-
-    # Ordenamos alfabéticamente (si quieres orden numérico, lo hacemos luego)
-    opciones = sorted(estratos.dropna().unique().tolist())
-
-    # Formato que espera Dash Dropdown
-    return [{"label": e, "value": e} for e in opciones]
+    return build_dropdown_options(dff, "fami_estratovivienda", upper=False)
 
 #Grafica 3: Brecha por estrato, año y pruebas
 
@@ -826,6 +731,7 @@ def actualizar_q2_brecha_por_estrato(data, anio_slider, pruebas_sel, estratos_se
     if dff.empty:
         return px.bar(title="Sin datos"), "No hay datos para mostrar con los filtros actuales."
 
+    # normaliza estrato
     if "fami_estratovivienda" in dff.columns:
         dff["fami_estratovivienda"] = dff["fami_estratovivienda"].astype(str).str.strip()
 
@@ -834,6 +740,7 @@ def actualizar_q2_brecha_por_estrato(data, anio_slider, pruebas_sel, estratos_se
     if dff.empty:
         return px.bar(title="Sin datos"), f"No hay datos para {titulo_anio} con los filtros actuales."
 
+    # filtro opcional
     if estratos_sel:
         estratos_sel_clean = [str(e).strip() for e in estratos_sel]
         dff = dff[dff["fami_estratovivienda"].isin(estratos_sel_clean)]
@@ -897,8 +804,7 @@ def mapa_delta_bilingue_por_mpio(data):
         return px.choropleth_mapbox(title="Con esos filtros no quedaron municipios de Bolívar")
 
     # 3) bilingüe Sí/No
-    dff["bilingue_label"] = dff["cole_bilingue"].map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"})
-
+    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
     # promedios por mpio y bilingüe
     g = (
         dff.groupby(["mpio_norm", "bilingue_label"])["punt_global"]
