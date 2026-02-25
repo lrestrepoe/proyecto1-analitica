@@ -1,14 +1,44 @@
+import json
 from pathlib import Path
 import dash
 from dash import Input, Output, html, dcc
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
 # Cargar el DataFrame global desde un archivo Parquet
 BASE_DIR = Path(__file__).resolve().parent
 
 # leer el parquet con pandas
 df = pd.read_parquet(BASE_DIR / "data" / "df_global.parquet")
+
+#  Cargar GeoJSON mapa y que se ajuste a los datos
+GEOJSON_PATH = BASE_DIR / "data" / "dane_municipios.geojson"  # <-- cambia al nombre real
+with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
+    geojson_mcpios = json.load(f)
+
+print(geojson_mcpios["features"][0]["properties"])
+
+geojson_mcpios = {
+    "type": "FeatureCollection",
+    "features": [
+        f for f in geojson_mcpios["features"]
+        if f["properties"]["dpt"] == "BOLIVAR"
+    ]
+}
+
+print(geojson_mcpios["features"][0].keys())
+print(geojson_mcpios["features"][0])
+
+# --- DF base para pintar (usa el id de cada feature) ---
+rows = []
+for feat in geojson_mcpios.get("features", []):
+    rows.append({
+        "id": str(feat.get("id")),  # IMPORTANTÍSIMO: debe coincidir con featureidkey
+        "name": feat.get("properties", {}).get("name", ""),
+        "z": 1
+    })
+df_map_base = pd.DataFrame(rows)
 
 # Dropdowns con valores del dataset (para esto se necesita el df global, asi que lo dejo despues de cargar el parquet)
 def opciones(col):
@@ -157,6 +187,8 @@ def filtrar_df(anios, naturalezas, estratos):
     Output("contenido_tabs", "children"),
     Input("tabs", "value")
 )
+
+# función para renderizar el contenido de cada pestaña
 def render_tab(tab):
     if tab == "tab-q1":
         return html.Div(
@@ -169,6 +201,8 @@ def render_tab(tab):
                             id="insight_q1",
                             style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
                         ),
+                        html.H4("Mapa (municipios)"),
+                        dcc.Graph(id="mapa_q1_bilingue_delta"),
 
                         # 2 por fila
                         html.Div(
@@ -1041,6 +1075,110 @@ def actualizar_q2_brecha_por_estrato(data, anio_slider, pruebas_sel, estratos_se
     )
 
     return fig, insight
+
+
+def norm_txt(x: str) -> str:
+    """Mayúsculas + sin tildes + sin dobles espacios"""
+    if x is None:
+        return ""
+    x = str(x).strip().upper()
+    x = "".join(c for c in unicodedata.normalize("NFKD", x) if not unicodedata.combining(c))
+    x = " ".join(x.split())
+    return x
+
+# --- lista de municipios del GEOJSON (Bolívar) normalizada ---
+MPIOS_BOLIVAR = sorted({
+    norm_txt(f["properties"].get("name", ""))
+    for f in geojson_mcpios.get("features", [])
+})
+
+@app.callback(
+    Output("mapa_q1_bilingue_delta", "figure"),
+    Input("df_filtrado", "data"),
+)
+
+    
+def mapa_delta_bilingue_por_mpio(data):
+    dff = pd.DataFrame(data)
+    if dff.empty:
+        return px.choropleth_mapbox(title="Sin datos")
+
+    req = {"cole_mcpio_ubicacion", "cole_bilingue", "punt_global"}
+    if not req.issubset(dff.columns):
+        return px.choropleth_mapbox(title=f"Faltan columnas: {req - set(dff.columns)}")
+
+    # 1) normaliza mpio del dataset
+    dff["mpio_norm"] = dff["cole_mcpio_ubicacion"].apply(norm_txt)
+
+    # 2) filtra SOLO municipios que existen en el geojson de Bolívar
+    dff = dff[dff["mpio_norm"].isin(MPIOS_BOLIVAR)]
+    if dff.empty:
+        return px.choropleth_mapbox(title="Con esos filtros no quedaron municipios de Bolívar")
+
+    # 3) bilingüe Sí/No
+    dff["bilingue_label"] = dff["cole_bilingue"].map({"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"})
+
+    # promedios por mpio y bilingüe
+    g = (
+        dff.groupby(["mpio_norm", "bilingue_label"])["punt_global"]
+        .mean()
+        .reset_index()
+    )
+
+    piv = g.pivot(index="mpio_norm", columns="bilingue_label", values="punt_global").reset_index()
+
+    piv["delta"] = piv.get("Sí") - piv.get("No")
+    
+    # 4) delta seguro (no revienta si falta Sí o No)
+    if "Sí" in piv.columns and "No" in piv.columns:
+        piv["delta"] = piv["Sí"] - piv["No"]
+    else:
+        piv["delta"] = None
+
+    # 5) asegúrate de tener TODOS los municipios del geojson (merge con base)
+    base = pd.DataFrame({"mpio_norm": MPIOS_BOLIVAR})
+    piv = base.merge(piv, on="mpio_norm", how="left")
+
+    # 6) mapa (featureidkey usa el NAME del geojson, pero normalizado!)
+    #    como el geojson tiene properties.name con tildes? (en tu ejemplo no)
+    #    nosotros normalizamos el "locations" para empatar con properties.name normalizado;
+    #    entonces necesitamos crear una copia del geojson con name normalizado:
+
+    geojson_norm = {"type": "FeatureCollection", "features": []}
+    for f in geojson_mcpios.get("features", []):
+        ff = dict(f)
+        props = dict(ff.get("properties", {}))
+        props["name_norm"] = norm_txt(props.get("name", ""))
+        ff["properties"] = props
+        geojson_norm["features"].append(ff)
+
+    prom = (
+        dff.groupby("mpio_norm")["punt_global"]
+        .mean()
+        .reset_index()
+        .rename(columns={"punt_global": "promedio_total"})
+    )
+
+# merge con piv
+    piv = piv.merge(prom, on="mpio_norm", how="left")
+    
+    fig = px.choropleth_mapbox(
+        piv,
+        geojson=geojson_norm,
+        locations="mpio_norm",
+        featureidkey="properties.name_norm",
+        color="promedio_total",
+        mapbox_style="carto-positron",
+        zoom=7,
+        center={"lat": 9.2, "lon": -74.8},
+        opacity=0.65,
+        hover_name="mpio_norm",
+        hover_data={"Sí": True, "No": True, "delta": True},
+        title="Mapa: Δ puntaje global (Bilingüe Sí - No) por municipio | Bolívar",
+    )
+
+    fig.update_layout(margin=dict(l=0, r=0, t=45, b=0))
+    return fig
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
