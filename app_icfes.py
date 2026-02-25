@@ -5,7 +5,8 @@ from dash import Input, Output, html, dcc
 import pandas as pd
 import plotly.express as px
 import unicodedata
-from src.helpers import map_sino, mean_by
+from src.helpers import map_sino, mean_by, apply_year_filter, brecha_genero_long, build_insight_maxmin
+
 
 
 # Cargar el DataFrame global desde un archivo Parquet
@@ -683,7 +684,6 @@ def q1_delta_internet(data):
 #Callback Q2
 
 # Gráfica 1: Brecha (M - F) por prueba y año
-
 @app.callback(
     Output("grafico_q2_brecha_pruebas", "figure"),
     Output("insight_q2_pruebas", "children"),
@@ -692,71 +692,30 @@ def q1_delta_internet(data):
     Input("q2_pruebas", "value"),
 )
 def actualizar_q2_brecha_por_prueba(data, anio_slider, pruebas_sel):
-    """
-    1) Toma el dataframe filtrado global (df_filtrado)
-    2) Filtra por año usando el slider de la gráfica 1
-    3) Calcula promedios por género en las pruebas seleccionadas
-    4) Calcula brecha = promedio(M) - promedio(F)
-    5) Grafica barras por prueba
-    """
     dff = pd.DataFrame(data)
-
     if dff.empty:
-        fig = px.bar(title="Sin datos para los filtros seleccionados")
-        return fig, "No hay datos para mostrar con los filtros actuales."
+        return px.bar(title="Sin datos"), "No hay datos para mostrar con los filtros actuales."
 
-    # Filtrado por año (si no es 'Todos')
-    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
-        dff = dff[dff["anio"] == int(anio_slider)]
-
-    if dff.empty:
-        fig = px.bar(title="Sin datos para el año seleccionado")
-        return fig, "No hay datos para ese año con los filtros actuales."
-
-    # Validación de pruebas
-    if not pruebas_sel:
-        pruebas_sel = ["punt_global"]
-
-    pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
-    if len(pruebas_sel) == 0:
-        fig = px.bar(title="No hay pruebas válidas seleccionadas")
-        return fig, "Seleccione al menos una prueba válida."
-
-    # Promedios por género
-    promedios = dff.groupby("estu_genero")[pruebas_sel].mean()
-
-    if ("M" not in promedios.index) or ("F" not in promedios.index):
-        fig = px.bar(title="Faltan categorías de género (M/F)")
-        return fig, "No se encuentran ambos géneros (M y F) con los filtros actuales."
-
-    brecha = (promedios.loc["M"] - promedios.loc["F"]).reset_index()
-    brecha.columns = ["prueba", "brecha_M_F"]
-    brecha["prueba"] = brecha["prueba"].map(Q2_PUNTAJES)
-
+    dff = apply_year_filter(dff, anio_slider, ANIO_TODOS)
     titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+    if dff.empty:
+        return px.bar(title="Sin datos"), f"No hay datos para {titulo_anio} con los filtros actuales."
+
+    brecha = brecha_genero_long(dff, pruebas_sel, Q2_PUNTAJES, group_col=None)
+    if brecha.empty:
+        return px.bar(title="No se pudo calcular brecha"), "No se encuentran ambos géneros (M y F) o pruebas válidas."
 
     fig = px.bar(
-        brecha,
-        x="prueba",
-        y="brecha_M_F",
+        brecha, x="prueba", y="brecha_M_F",
         title=f"Diferencia (Masculino - Femenino) por prueba | {titulo_anio}",
         labels={"prueba": "Prueba", "brecha_M_F": "Diferencia (M - F)"},
     )
     fig.update_layout(xaxis_tickangle=-45)
 
-    max_row = brecha.loc[brecha["brecha_M_F"].idxmax()]
-    min_row = brecha.loc[brecha["brecha_M_F"].idxmin()]
-
-    insight = (
-        f"En {titulo_anio}, la mayor brecha es '{max_row['prueba']}' con {max_row['brecha_M_F']:.2f} puntos. "
-        f"La menor brecha es '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
-    )
-
+    insight = f"En {titulo_anio}, " + build_insight_maxmin(brecha, group_col=None)
     return fig, insight
 
 #Opciones dropdown tipo de colegio (dinámico)
-
-
 @app.callback(
     Output("q2_cole_filtro", "options"),
     Input("df_filtrado", "data"),
@@ -780,8 +739,6 @@ def actualizar_opciones_colegio(data):
 
 
 #Grafica 2: Brecha por tipo de colegio, año y pruebas
-
-
 @app.callback(
     Output("grafico_q2_brecha_colegio", "figure"),
     Output("insight_q2_colegio", "children"),
@@ -791,89 +748,29 @@ def actualizar_opciones_colegio(data):
     Input("q2_cole_filtro", "value"),
 )
 def actualizar_q2_brecha_por_colegio(data, anio_slider, pruebas_sel, colegios_sel):
-    """
-    1) Toma df_filtrado
-    2) Filtra por año (slider independiente de gráfica 2)
-    3) Filtra por tipo de colegio si el usuario selecciona valores en dropdown
-    4) Calcula brecha (M - F) por tipo de colegio para cada prueba seleccionada
-    5) Grafica barras agrupadas por colegio (y color por prueba)
-    """
     dff = pd.DataFrame(data)
-
     if dff.empty:
-        fig = px.bar(title="Sin datos para los filtros seleccionados")
-        return fig, "No hay datos para mostrar con los filtros actuales."
+        return px.bar(title="Sin datos"), "No hay datos para mostrar con los filtros actuales."
 
-    # Validación columnas
-    if "cole_caracter" not in dff.columns:
-        fig = px.bar(title="No existe cole_caracter en los datos")
-        return fig, "No se encontró la columna 'cole_caracter' en el dataset del dashboard."
+    # limpieza de colegio (como ya hacías)
+    if "cole_caracter" in dff.columns:
+        dff["cole_caracter"] = dff["cole_caracter"].astype(str).str.strip().str.upper()
 
-    if "estu_genero" not in dff.columns:
-        fig = px.bar(title="No existe estu_genero en los datos")
-        return fig, "No se encontró la columna 'estu_genero' en el dataset del dashboard."
-
-    # Limpieza mínima de texto para evitar duplicados por espacios
-    dff["cole_caracter"] = dff["cole_caracter"].astype(str).str.strip().str.upper()
-
-    # Filtrar por año (si no es 'Todos')
-    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
-        dff = dff[dff["anio"] == int(anio_slider)]
-
-    if dff.empty:
-        fig = px.bar(title="Sin datos para el año seleccionado")
-        return fig, "No hay datos para ese año con los filtros actuales."
-
-    # Filtrar por tipos de colegio seleccionados (si el usuario escogió alguno)
-    if colegios_sel and len(colegios_sel) > 0:
-        dff = dff[dff["cole_caracter"].isin([str(c).strip().upper() for c in colegios_sel])]
-
-    if dff.empty:
-        fig = px.bar(title="Sin datos para el filtro de colegio seleccionado")
-        return fig, "No hay datos para esos tipos de colegio con los filtros actuales."
-
-    # Validación pruebas
-    if not pruebas_sel:
-        pruebas_sel = ["punt_global"]
-
-    pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
-    if len(pruebas_sel) == 0:
-        fig = px.bar(title="No hay pruebas válidas seleccionadas")
-        return fig, "Seleccione al menos una prueba válida."
-
-    # Promedios por (colegio, género)
-    proms = dff.groupby(["cole_caracter", "estu_genero"])[pruebas_sel].mean().unstack("estu_genero")
-
-    # Brechas por prueba: M - F
-    brechas = {}
-    for p in pruebas_sel:
-        if (p, "M") in proms.columns and (p, "F") in proms.columns:
-            brechas[p] = proms[(p, "M")] - proms[(p, "F")]
-
-    if len(brechas) == 0:
-        fig = px.bar(title="No se pudo calcular brecha (faltan M/F)")
-        return fig, "No se pudo calcular la brecha: faltan M y/o F en los grupos."
-
-    # Formato largo para plotly
-    df_long = (
-        pd.DataFrame(brechas)
-        .reset_index()
-        .melt(id_vars="cole_caracter", var_name="prueba", value_name="brecha_M_F")
-        .dropna()
-    )
-    df_long["prueba"] = df_long["prueba"].map(Q2_PUNTAJES)
-
-    # Orden visual por la primera prueba seleccionada (para que el gráfico se lea mejor)
-    prueba_ref_label = Q2_PUNTAJES.get(pruebas_sel[0], pruebas_sel[0])
-    orden = (
-        df_long[df_long["prueba"] == prueba_ref_label]
-        .sort_values("brecha_M_F")["cole_caracter"]
-        .tolist()
-    )
-    if len(orden) > 0:
-        df_long["cole_caracter"] = pd.Categorical(df_long["cole_caracter"], categories=orden, ordered=True)
-
+    dff = apply_year_filter(dff, anio_slider, ANIO_TODOS)
     titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+    if dff.empty:
+        return px.bar(title="Sin datos"), f"No hay datos para {titulo_anio} con los filtros actuales."
+
+    # filtro opcional
+    if colegios_sel:
+        colegios_sel_clean = [str(c).strip().upper() for c in colegios_sel]
+        dff = dff[dff["cole_caracter"].isin(colegios_sel_clean)]
+        if dff.empty:
+            return px.bar(title="Sin datos"), "No hay datos para esos tipos de colegio con los filtros actuales."
+
+    df_long = brecha_genero_long(dff, pruebas_sel, Q2_PUNTAJES, group_col="cole_caracter")
+    if df_long.empty:
+        return px.bar(title="No se pudo calcular brecha"), "No se pudo calcular la brecha: faltan M/F o grupos."
 
     fig = px.bar(
         df_long,
@@ -886,21 +783,10 @@ def actualizar_q2_brecha_por_colegio(data, anio_slider, pruebas_sel, colegios_se
     )
     fig.update_layout(xaxis_tickangle=-45)
 
-    max_row = df_long.loc[df_long["brecha_M_F"].idxmax()]
-    min_row = df_long.loc[df_long["brecha_M_F"].idxmin()]
-
-    insight = (
-        f"En {titulo_anio}, la mayor brecha es '{max_row['cole_caracter']}' en '{max_row['prueba']}' "
-        f"con {max_row['brecha_M_F']:.2f} puntos. "
-        f"La menor brecha es '{min_row['cole_caracter']}' en '{min_row['prueba']}' "
-        f"con {min_row['brecha_M_F']:.2f} puntos."
-    )
-
+    insight = f"En {titulo_anio}, " + build_insight_maxmin(df_long, group_col="cole_caracter")
     return fig, insight
 
 # Opciones dropdown estrato 
-
-
 @app.callback(
     Output("q2_estrato_filtro", "options"),
     Input("df_filtrado", "data"),
@@ -927,126 +813,36 @@ def actualizar_opciones_estrato(data):
 
 #Grafica 3: Brecha por estrato, año y pruebas
 
-
 @app.callback(
     Output("grafico_q2_brecha_estrato", "figure"),
     Output("insight_q2_estrato", "children"),
-    Input("df_filtrado", "data"),            # dataset filtrado global
-    Input("q2_year_slider_estrato", "value"),# slider independiente de esta gráfica
-    Input("q2_pruebas_estrato", "value"),    # pruebas seleccionadas
-    Input("q2_estrato_filtro", "value"),     # filtro opcional de estratos
+    Input("df_filtrado", "data"),
+    Input("q2_year_slider_estrato", "value"),
+    Input("q2_pruebas_estrato", "value"),
+    Input("q2_estrato_filtro", "value"),
 )
 def actualizar_q2_brecha_por_estrato(data, anio_slider, pruebas_sel, estratos_sel):
-    """
-    1) Reconstruye df desde df_filtrado
-    2) Filtra por año (si no es 'Todos')
-    3) Filtra por estrato (si el usuario selecciona estratos)
-    4) Calcula promedios por (estrato, género)
-    5) Calcula brecha = M - F por estrato, para cada prueba seleccionada
-    6) Grafica barras agrupadas por estrato y coloreadas por prueba
-    """
-
     dff = pd.DataFrame(data)
-
-    # Caso sin datos
     if dff.empty:
-        fig = px.bar(title="Sin datos para los filtros seleccionados")
-        return fig, "No hay datos para mostrar con los filtros actuales."
+        return px.bar(title="Sin datos"), "No hay datos para mostrar con los filtros actuales."
 
-    # Verificar columnas mínimas necesarias
-    if "fami_estratovivienda" not in dff.columns:
-        fig = px.bar(title="No existe fami_estratovivienda en los datos")
-        return fig, "No se encontró la columna 'fami_estratovivienda' en el dataset del dashboard."
+    if "fami_estratovivienda" in dff.columns:
+        dff["fami_estratovivienda"] = dff["fami_estratovivienda"].astype(str).str.strip()
 
-    if "estu_genero" not in dff.columns:
-        fig = px.bar(title="No existe estu_genero en los datos")
-        return fig, "No se encontró la columna 'estu_genero' en el dataset del dashboard."
-
-    # Limpieza mínima de texto para evitar duplicados por espacios
-    dff["fami_estratovivienda"] = dff["fami_estratovivienda"].astype(str).str.strip()
-
-    # Filtrar por año 
-  
-    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
-        dff = dff[dff["anio"] == int(anio_slider)]
-
+    dff = apply_year_filter(dff, anio_slider, ANIO_TODOS)
+    titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
     if dff.empty:
-        fig = px.bar(title="Sin datos para el año seleccionado")
-        return fig, "No hay datos para ese año con los filtros actuales."
+        return px.bar(title="Sin datos"), f"No hay datos para {titulo_anio} con los filtros actuales."
 
-    
-    # Filtrar por estratos seleccionados 
-    
-    if estratos_sel and len(estratos_sel) > 0:
-        # Normalizamos a string/strip para comparar bien
+    if estratos_sel:
         estratos_sel_clean = [str(e).strip() for e in estratos_sel]
         dff = dff[dff["fami_estratovivienda"].isin(estratos_sel_clean)]
+        if dff.empty:
+            return px.bar(title="Sin datos"), "No hay datos para esos estratos con los filtros actuales."
 
-    if dff.empty:
-        fig = px.bar(title="Sin datos para el filtro de estrato seleccionado")
-        return fig, "No hay datos para esos estratos con los filtros actuales."
-
-    
-    # Validar pruebas seleccionadas
-    
-    if not pruebas_sel:
-        pruebas_sel = ["punt_global"]
-
-    # Mantener solo columnas que existen
-    pruebas_sel = [p for p in pruebas_sel if p in dff.columns]
-
-    if len(pruebas_sel) == 0:
-        fig = px.bar(title="No hay pruebas válidas seleccionadas")
-        return fig, "Seleccione al menos una prueba válida."
-
-    
-    # Promedios por (estrato, género) y brecha M - F
-    
-    proms = (
-        dff.groupby(["fami_estratovivienda", "estu_genero"])[pruebas_sel]
-        .mean()
-        .unstack("estu_genero")
-    )
-
-    # Calculamos brecha por prueba: (M - F)
-    brechas = {}
-    for p in pruebas_sel:
-        if (p, "M") in proms.columns and (p, "F") in proms.columns:
-            brechas[p] = proms[(p, "M")] - proms[(p, "F")]
-
-    if len(brechas) == 0:
-        fig = px.bar(title="No se pudo calcular brecha (faltan M/F)")
-        return fig, "No se pudo calcular la brecha: faltan M y/o F en los grupos."
-
-    # Convertimos a formato largo para graficar con color por prueba
-    df_long = (
-        pd.DataFrame(brechas)
-        .reset_index()
-        .melt(id_vars="fami_estratovivienda", var_name="prueba", value_name="brecha_M_F")
-        .dropna()
-    )
-
-    # Nombres bonitos de prueba
-    df_long["prueba"] = df_long["prueba"].map(Q2_PUNTAJES)
-
-    
-    # Orden del eje X (para que se lea mejor)
-    # Ordenamos por la brecha de la primera prueba seleccionada
-    
-    prueba_ref_label = Q2_PUNTAJES.get(pruebas_sel[0], pruebas_sel[0])
-    orden = (
-        df_long[df_long["prueba"] == prueba_ref_label]
-        .sort_values("brecha_M_F")["fami_estratovivienda"]
-        .tolist()
-    )
-    if len(orden) > 0:
-        df_long["fami_estratovivienda"] = pd.Categorical(
-            df_long["fami_estratovivienda"], categories=orden, ordered=True
-        )
-
-    # Construir figura
-    
-    titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+    df_long = brecha_genero_long(dff, pruebas_sel, Q2_PUNTAJES, group_col="fami_estratovivienda")
+    if df_long.empty:
+        return px.bar(title="No se pudo calcular brecha"), "No se pudo calcular la brecha: faltan M/F o grupos."
 
     fig = px.bar(
         df_long,
@@ -1055,27 +851,12 @@ def actualizar_q2_brecha_por_estrato(data, anio_slider, pruebas_sel, estratos_se
         color="prueba",
         barmode="group",
         title=f"Diferencia (Masculino - Femenino) por estrato | {titulo_anio}",
-        labels={
-            "fami_estratovivienda": "Estrato del hogar","brecha_M_F": "Diferecia (M - F)","prueba": "Prueba",
-        },
+        labels={"fami_estratovivienda": "Estrato del hogar", "brecha_M_F": "Diferencia (M - F)", "prueba": "Prueba"},
     )
-
     fig.update_layout(xaxis_tickangle=-45)
 
-    # Mínimo y máximo
-
-    max_row = df_long.loc[df_long["brecha_M_F"].idxmax()]
-    min_row = df_long.loc[df_long["brecha_M_F"].idxmin()]
-
-    insight = (
-        f"En {titulo_anio}, la mayor brecha aparece en el '{max_row['fami_estratovivienda']}' "
-        f"para '{max_row['prueba']}' con {max_row['brecha_M_F']:.2f} puntos. "
-        f"La menor brecha aparece en el '{min_row['fami_estratovivienda']}' "
-        f"para '{min_row['prueba']}' con {min_row['brecha_M_F']:.2f} puntos."
-    )
-
+    insight = f"En {titulo_anio}, " + build_insight_maxmin(df_long, group_col="fami_estratovivienda")
     return fig, insight
-
 
 def norm_txt(x: str) -> str:
     """Mayúsculas + sin tildes + sin dobles espacios"""
