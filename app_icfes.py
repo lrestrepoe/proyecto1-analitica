@@ -211,13 +211,6 @@ def render_tab(tab):
                             style={"display": "flex", "gap": "12px", "marginTop": "10px"},
                         ),
 
-                        html.Div(
-                            [
-                                html.Div([dcc.Graph(id="grafico_q1_internet")], style={"flex": "1"}),
-                                html.Div([dcc.Graph(id="grafico_q1_pc")], style={"flex": "1"}),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
                       html.H4("Gráficas adicionales", style={"marginTop": "0px"}),
 
                         html.Div(
@@ -605,52 +598,6 @@ def q1_delta_por_estrato(data):
         x_col="fami_estratovivienda",
         title="Diferencia de puntaje global (Bilingüe Sí - No) por estrato",
         x_label="Estrato",
-    )
-
-# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen computador o no
-@app.callback(
-    Output("grafico_q1_pc", "figure"),
-    Input("df_filtrado", "data")
-)
-def q1_delta_pc(data):
-    dff = pd.DataFrame(data)
-    req = {"cole_bilingue", "fami_tienecomputador", "punt_global"}
-    if dff.empty or not req.issubset(dff.columns):
-        return px.bar(title="No hay datos / faltan columnas")
-
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_tienecomputador"])
-
-    piv = delta_yes_no(dff, "fami_tienecomputador", "bilingue_label", "punt_global")
-
-    return fig_delta_bar(
-        piv,
-        x_col="fami_tienecomputador",
-        title="Diferencia de puntaje global (Bilingüe Sí - No) según computador",
-        x_label="Tiene computador",
-    )
-    
-# Grafico diferencia en puntaje global entre colegios bilingües y no bilingües dentro de si tienen internet o no
-@app.callback(
-    Output("grafico_q1_internet", "figure"),
-    Input("df_filtrado", "data")
-)
-def q1_delta_internet(data):
-    dff = pd.DataFrame(data)
-    req = {"cole_bilingue", "fami_tieneinternet", "punt_global"}
-    if dff.empty or not req.issubset(dff.columns):
-        return px.bar(title="No hay datos / faltan columnas")
-
-    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
-    dff = dff.dropna(subset=["bilingue_label", "punt_global", "fami_tieneinternet"])
-
-    piv = delta_yes_no(dff, "fami_tieneinternet", "bilingue_label", "punt_global")
-
-    return fig_delta_bar(
-        piv,
-        x_col="fami_tieneinternet",
-        title="Diferencia de puntaje global (Bilingüe Sí - No) según internet",
-        x_label="Tiene internet",
     )
 
 @app.callback(
