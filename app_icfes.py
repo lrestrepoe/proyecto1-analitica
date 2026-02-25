@@ -5,6 +5,8 @@ from dash import Input, Output, html, dcc
 import pandas as pd
 import plotly.express as px
 import unicodedata
+from src.helpers import map_sino, mean_by
+
 
 # Cargar el DataFrame global desde un archivo Parquet
 BASE_DIR = Path(__file__).resolve().parent
@@ -13,11 +15,9 @@ BASE_DIR = Path(__file__).resolve().parent
 df = pd.read_parquet(BASE_DIR / "data" / "df_global.parquet")
 
 #  Cargar GeoJSON mapa y que se ajuste a los datos
-GEOJSON_PATH = BASE_DIR / "data" / "dane_municipios.geojson"  # <-- cambia al nombre real
+GEOJSON_PATH = BASE_DIR / "data" / "mpios.json"  # <-- cambia al nombre real
 with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
     geojson_mcpios = json.load(f)
-
-print(geojson_mcpios["features"][0]["properties"])
 
 geojson_mcpios = {
     "type": "FeatureCollection",
@@ -26,9 +26,6 @@ geojson_mcpios = {
         if f["properties"]["dpt"] == "BOLIVAR"
     ]
 }
-
-print(geojson_mcpios["features"][0].keys())
-print(geojson_mcpios["features"][0])
 
 # --- DF base para pintar (usa el id de cada feature) ---
 rows = []
@@ -415,6 +412,36 @@ def render_tab(tab):
                             id="insight_q2_estrato",
                             style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
                         ),
+                        html.H4("Distribución porcentual por género"),
+
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.Label("Año"),
+                                        dcc.Slider(
+                                            id="q2_year_slider_genero",
+                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                            max=ANIO_TODOS,
+                                            value=ANIO_TODOS,
+                                            marks=marks_anio,
+                                            step=None,
+                                        ),
+                                    ],
+                                    style={"flex": "1"},
+                                ),
+                            ],
+                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                        ),
+
+                        dcc.Graph(id="grafico_q2_dist_genero"),
+
+                        html.Div(
+                            id="insight_q2_genero",
+                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
+                        ),
+
+                        html.Hr(),
 
                     ],
                     style={
@@ -466,25 +493,13 @@ def mostrar_resumen(data):
 )
 def actualizar_q1(data):
     dff = pd.DataFrame(data)
-
-    if dff.empty:
+    if dff.empty or "cole_bilingue" not in dff.columns:
         return px.bar(title="No hay datos")
 
-    if "cole_bilingue" not in dff.columns:
-        return px.bar(title="No existe columna cole_bilingue")
+    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
+    dff = dff.dropna(subset=["bilingue_label", "punt_global"])
 
-    dff["bilingue_label"] = dff["cole_bilingue"].map({
-        "S": "Sí",
-        "N": "No",
-        "SI": "Sí",
-        "NO": "No"
-    })
-    # Agrupar por bilingüe
-    resumen = (
-        dff.groupby("bilingue_label")["punt_global"]
-        .agg(["mean", "count", "std"])
-        .reset_index()
-    )
+    resumen = mean_by(dff, "bilingue_label", "punt_global")
 
     fig = px.bar(
         resumen,
@@ -494,10 +509,8 @@ def actualizar_q1(data):
         title="Promedio de puntaje global por tipo de colegio bilingüe",
         labels={"bilingue_label": "Colegio bilingüe", "mean": "Promedio puntaje global"},
     )
-
     fig.update_traces(textposition="outside")
     fig.update_layout(yaxis_range=[0, 500])
-
     return fig
 
 # Insight Q1: diferencia en puntaje global entre colegios bilingües y no bilingües
@@ -507,30 +520,21 @@ def actualizar_q1(data):
 )
 def insight_q1(data):
     dff = pd.DataFrame(data)
-    if dff.empty or "cole_bilingue" not in dff.columns or "punt_global" not in dff.columns:
+    if dff.empty or not {"cole_bilingue", "punt_global"}.issubset(dff.columns):
         return "No hay suficiente información para calcular la diferencia."
 
-    # Etiquetas Sí/No
-    dff["bilingue_label"] = dff["cole_bilingue"].map({
-        "S": "Sí",
-        "N": "No",
-        "SI": "Sí",
-        "NO": "No"
-    })
+    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
+    dff = dff.dropna(subset=["bilingue_label", "punt_global"])
 
-    # Promedios
     prom = dff.groupby("bilingue_label")["punt_global"].mean()
-
     if ("Sí" not in prom.index) or ("No" not in prom.index):
         return "Con los filtros actuales no hay datos para comparar 'Sí' vs 'No'."
 
     diff = prom["Sí"] - prom["No"]
-
-    # Conteos
     n_si = (dff["bilingue_label"] == "Sí").sum()
     n_no = (dff["bilingue_label"] == "No").sum()
-
     signo = "más" if diff >= 0 else "menos"
+
     return (
         f"Los estudiantes de colegios bilingües obtienen en promedio "
         f"{abs(diff):.1f} puntos {signo} en puntaje global que los de colegios no bilingües "
@@ -552,12 +556,8 @@ def q1_delta_por_estrato(data):
     if not req.issubset(set(dff.columns)):
         return px.bar(title="Faltan columnas para calcular diferencia por estrato")
 
-    # Etiquetas Sí/No
-    dff["bilingue_label"] = dff["cole_bilingue"].map({
-        "S": "Sí", "SI": "Sí",
-        "N": "No", "NO": "No"
-    })
-
+    dff["bilingue_label"] = map_sino(dff["cole_bilingue"])
+    
     # Promedio por estrato y bilingüe
     g = (
         dff.groupby(["fami_estratovivienda", "bilingue_label"])["punt_global"]
@@ -1179,6 +1179,60 @@ def mapa_delta_bilingue_por_mpio(data):
 
     fig.update_layout(margin=dict(l=0, r=0, t=45, b=0))
     return fig
+
+@app.callback(
+    Output("grafico_q2_dist_genero", "figure"),
+    Output("insight_q2_genero", "children"),
+    Input("df_filtrado", "data"),
+    Input("q2_year_slider_genero", "value"),
+)
+def q2_dist_genero(data, anio_slider):
+    dff = pd.DataFrame(data)
+
+    if dff.empty or "estu_genero" not in dff.columns or "anio" not in dff.columns:
+        fig = px.pie(title="Sin datos para mostrar")
+        return fig, "No hay datos suficientes."
+
+    # filtrar por año si no es "Todos"
+    if anio_slider is not None and int(anio_slider) != int(ANIO_TODOS):
+        dff = dff[dff["anio"] == int(anio_slider)]
+
+    if dff.empty:
+        fig = px.pie(title="Sin datos para ese año")
+        return fig, "No hay datos para ese año con los filtros actuales."
+
+    # limpiar/normalizar géneros (por si vienen espacios o minúsculas)
+    dff["estu_genero"] = dff["estu_genero"].astype(str).str.strip().str.upper()
+    dff = dff[dff["estu_genero"].isin(["M", "F"])]
+
+    if dff.empty:
+        fig = px.pie(title="Sin datos de género M/F")
+        return fig, "No se encuentran categorías M y F con los filtros actuales."
+
+    conteo = dff["estu_genero"].value_counts().rename_axis("genero").reset_index(name="n")
+    total = conteo["n"].sum()
+    conteo["pct"] = (conteo["n"] / total) * 100
+
+    # labels bonitos
+    conteo["genero_label"] = conteo["genero"].map({"M": "M", "F": "F"})
+
+    titulo_anio = "todos los años" if int(anio_slider) == int(ANIO_TODOS) else f"el año {int(anio_slider)}"
+
+    fig = px.pie(
+        conteo,
+        names="genero_label",
+        values="pct",
+        title=f"Distribución porcentual por género | {titulo_anio}",
+        hole=0,  # si quieres dona: hole=0.35
+    )
+    fig.update_traces(textinfo="percent", textposition="inside")
+
+    pct_f = float(conteo.loc[conteo["genero"] == "F", "pct"].iloc[0]) if (conteo["genero"] == "F").any() else 0.0
+    pct_m = float(conteo.loc[conteo["genero"] == "M", "pct"].iloc[0]) if (conteo["genero"] == "M").any() else 0.0
+
+    insight = f"En {titulo_anio}: F = {pct_f:.1f}% | M = {pct_m:.1f}% (n={total:,})."
+
+    return fig, insight
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)
