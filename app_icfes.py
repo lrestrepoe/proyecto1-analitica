@@ -10,7 +10,7 @@ import unicodedata
 BASE_DIR = Path(__file__).resolve().parent
 
 # leer el parquet con pandas
-df = pd.read_parquet(BASE_DIR / "data" / "df_global.parquet")
+df = pd.read_parquet(BASE_DIR / "data" / "mpios.json")
 
 #  Cargar GeoJSON mapa y que se ajuste a los datos
 GEOJSON_PATH = BASE_DIR / "data" / "dane_municipios.geojson"  # <-- cambia al nombre real
