@@ -6,7 +6,8 @@ import pandas as pd
 import plotly.express as px
 import unicodedata
 from src.helpers import (build_dropdown_options, map_sino, mean_by, apply_year_filter, 
-                         brecha_genero_long, build_insight_maxmin, delta_yes_no, fig_delta_bar, order_estrato_like) 
+                         brecha_genero_long, build_insight_maxmin, delta_yes_no, fig_delta_bar, order_estrato_like,
+                         edu_to_num, edu_bucket, build_q3_features, brecha_alto_bajo_por) 
                             
 
 # Cargar el DataFrame global desde un archivo Parquet
@@ -460,8 +461,24 @@ def render_tab(tab):
             [
                 html.Div(
                     [
-                        html.H3("Q3: Educación padres y puntaje global"),
-                        html.P("Aquí vamos a construir la relación y dónde se debilita (compensación del colegio)."),
+                        html.H3("Influencia Educación padres, capital educativo y puntaje global"),
+                        html.Hr(),
+
+                        html.H4("Puntaje global vs capital educativo familiar (boxplot)"),
+                        dcc.Graph(id="q3_box_capital"),
+
+                        html.Hr(),
+                        html.H4("Puntaje promedio según educación de madre y padre (agrupado)"),
+                        dcc.Graph(id="q3_bar_madre_padre"),
+
+                        html.Hr(),
+                        html.H4("Heatmap de correlaciones"),
+                        dcc.Graph(id="q3_heatmap_corr"),
+                        html.Pre(id="q3_debug", style={"whiteSpace": "pre-wrap", "fontSize": "12px"}),
+
+                        html.Hr(),
+                        html.H4("Brecha (ALTO - BAJO) por ubicación y naturaleza"),
+                        dcc.Graph(id="q3_brecha_ub_nat"),
                     ],
                     style={
                         "padding": "12px",
@@ -920,6 +937,211 @@ def q2_dist_genero(data, anio_slider):
     insight = f"En {titulo_anio}: F = {pct_f:.1f}% | M = {pct_m:.1f}% (n={total:,})."
 
     return fig, insight
+
+@app.callback(
+    Output("q3_brecha_ub_nat", "figure"),
+    Input("df_filtrado", "data")
+)
+def q3_brecha_ubicacion_naturaleza(data):
+    dff = pd.DataFrame(data)
+
+    if dff.empty or "punt_global" not in dff.columns:
+        return px.bar(title="Sin datos")
+
+    dff, col_m, col_p = build_q3_features(dff)
+
+    if col_m is None or col_p is None:
+        return px.bar(title="No encuentro columnas de educación madre/padre")
+
+    if "cole_area_ubicacion" not in dff.columns or \
+       "cole_naturaleza" not in dff.columns:
+        return px.bar(title="Faltan columnas necesarias")
+
+    # Creamos brecha por combinación
+    tmp = dff.copy()
+    tmp = tmp.dropna(
+        subset=[
+            "capital_educativo",
+            "punt_global",
+            "cole_area_ubicacion",
+            "cole_naturaleza"
+        ]
+    )
+
+    tmp["grupo_capital"] = pd.NA
+    tmp.loc[tmp["capital_educativo"] >= 4, "grupo_capital"] = "ALTO"
+    tmp.loc[tmp["capital_educativo"] <= 1, "grupo_capital"] = "BAJO"
+    tmp = tmp.dropna(subset=["grupo_capital"])
+
+    g = (
+        tmp.groupby(
+            ["cole_area_ubicacion",
+             "cole_naturaleza",
+             "grupo_capital"]
+        )["punt_global"]
+        .mean()
+        .reset_index()
+    )
+
+    piv = g.pivot_table(
+        index=["cole_area_ubicacion", "cole_naturaleza"],
+        columns="grupo_capital",
+        values="punt_global"
+    ).reset_index()
+
+    if "ALTO" in piv.columns and "BAJO" in piv.columns:
+        piv["brecha"] = piv["ALTO"] - piv["BAJO"]
+    else:
+        return px.bar(title="No se pudo calcular brecha")
+
+    fig = px.bar(
+        piv,
+        x="cole_area_ubicacion",
+        y="brecha",
+        color="cole_naturaleza",
+        barmode="group",
+        title="Brecha (ALTO - BAJO) por ubicación y naturaleza",
+        labels={
+            "cole_area_ubicacion": "Ubicación",
+            "brecha": "Diferencia promedio",
+            "cole_naturaleza": "Naturaleza"
+        }
+    )
+
+    return fig
+
+@app.callback(
+    Output("q3_box_capital", "figure"),
+    Input("df_filtrado", "data")
+)
+def q3_boxplot_capital(data):
+    dff = pd.DataFrame(data)
+    if dff.empty or "punt_global" not in dff.columns:
+        return px.box(title="Sin datos")
+
+    dff, col_m, col_p = build_q3_features(dff)
+    if col_m is None or col_p is None or "capital_educativo" not in dff.columns:
+        return px.box(title="No encuentro educación madre/padre para construir capital_educativo")
+
+    tmp = dff.dropna(subset=["capital_educativo", "punt_global"]).copy()
+    if tmp.empty:
+        return px.box(title="Sin datos después de limpiar NA")
+
+    # para que el eje se vea tipo 0.0, 0.5, 1.0, ... 5.0
+    tmp["capital_educativo"] = tmp["capital_educativo"].round(1)
+
+    fig = px.box(
+        tmp,
+        x="capital_educativo",
+        y="punt_global",
+        title="Puntaje global vs Capital Educativo Familiar",
+        labels={"capital_educativo": "capital_educativo", "punt_global": "punt_global"},
+        points="outliers"
+    )
+    return fig
+
+
+@app.callback(
+    Output("q3_bar_madre_padre", "figure"),
+    Input("df_filtrado", "data")
+)
+def q3_bar_madre_padre(data):
+    dff = pd.DataFrame(data)
+    if dff.empty or "punt_global" not in dff.columns:
+        return px.bar(title="Sin datos")
+
+    dff, col_m, col_p = build_q3_features(dff)
+    if col_m is None or col_p is None:
+        return px.bar(title="No encuentro columnas educación madre/padre")
+
+    # arma tabla larga: Madre vs Padre
+    tmp = dff.copy()
+    tmp = tmp.dropna(subset=["punt_global", "edu_madre_bucket", "edu_padre_bucket"])
+
+    madre = (
+        tmp.groupby("edu_madre_bucket")["punt_global"].mean()
+        .reset_index().rename(columns={"edu_madre_bucket": "nivel", "punt_global": "prom"})
+    )
+    madre["tipo"] = "Madre"
+
+    padre = (
+        tmp.groupby("edu_padre_bucket")["punt_global"].mean()
+        .reset_index().rename(columns={"edu_padre_bucket": "nivel", "punt_global": "prom"})
+    )
+    padre["tipo"] = "Padre"
+
+    out = pd.concat([madre, padre], ignore_index=True)
+
+    orden = ["Baja", "Media", "Tecnica", "Superior"]
+    out["nivel"] = pd.Categorical(out["nivel"], categories=orden, ordered=True)
+    out = out.sort_values("nivel")
+
+    fig = px.bar(
+        out,
+        x="nivel",
+        y="prom",
+        color="tipo",
+        barmode="group",
+        title="Puntaje promedio según educación de madre y padre",
+        labels={"nivel": "Nivel educativo (agrupado)", "prom": "Puntaje promedio", "tipo": "Tipo"}
+    )
+    return fig
+
+
+@app.callback(
+    Output("q3_heatmap_corr", "figure"),
+    Output("q3_debug", "children"),
+    Input("df_filtrado", "data")
+)
+def q3_heatmap_corr(data):
+
+    dff = pd.DataFrame(data)
+
+    msg = f"Filas totales: {len(dff)}\n"
+    msg += f"Columnas disponibles: {len(dff.columns)}\n\n"
+
+    if dff.empty or "punt_global" not in dff.columns:
+        return px.imshow([[1]], text_auto=True, title="Sin datos"), msg + "No hay punt_global"
+
+    dff, col_m, col_p = build_q3_features(dff)
+
+    msg += f"col_m detectada: {col_m}\n"
+    msg += f"col_p detectada: {col_p}\n\n"
+
+    for c in ["punt_global", "edu_madre_n", "edu_padre_n", "capital_educativo"]:
+        if c in dff.columns:
+            msg += f"{c} -> NA: {int(dff[c].isna().sum())} | únicos: {int(dff[c].nunique(dropna=True))}\n"
+        else:
+            msg += f"{c} NO EXISTE\n"
+
+    cols = ["punt_global", "edu_madre_n", "edu_padre_n", "capital_educativo"]
+    for c in cols:
+        if c in dff.columns:
+            dff[c] = pd.to_numeric(dff[c], errors="coerce")
+    
+    cols_exist = [c for c in cols if c in dff.columns]
+
+    if len(cols_exist) < 2:
+        return px.imshow([[1]], text_auto=True, title="Muy pocas columnas"), msg
+
+
+    tmp = dff[cols_exist].dropna()
+
+    msg += f"\nFilas después dropna: {len(tmp)}\n"
+
+    if tmp.empty:
+        return px.imshow([[1]], text_auto=True, title="Sin datos suficientes para correlación")
+
+    corr = tmp.corr(numeric_only=True).round(2)
+
+    fig = px.imshow(
+        corr,
+        text_auto=True,
+        title="Heatmap correlaciones",
+        labels=dict(x="", y="", color="corr")
+    )
+
+    return fig, msg
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)

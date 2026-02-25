@@ -219,6 +219,135 @@ def order_estrato_like(piv: pd.DataFrame, col: str) -> pd.DataFrame:
     piv = piv.sort_values("_orden").drop(columns=["_orden"])
     return piv
 
+def edu_to_num(x):
+    """
+    Convierte educación (texto) a escala 0..5.
+    Ajusta patrones si tus categorías son distintas.
+    """
+    if x is None:
+        return pd.NA
+
+    s = str(x).strip().upper()
+
+    if s == "" or "NO SABE" in s:
+        return pd.NA
+
+    if "NINGUNO" in s or "NO ESTUDIO" in s:
+        return 0
+    if "PRIMARIA" in s:
+        return 1
+    if "SECUNDARIA" in s or "BACHILLER" in s or "MEDIA" in s:
+        return 2
+    if "TECNIC" in s or "TECNOLOG" in s:
+        return 3
+    if "UNIVERS" in s or "PROFES" in s:
+        return 4
+    if "POSTGR" in s or "MAESTR" in s or "DOCTOR" in s or "ESPECIAL" in s:
+        return 5
+
+    return pd.NA
+
+
+def edu_bucket(x):
+    """Agrupa educación en categorías simplificadas."""
+    n = edu_to_num(x)
+    if pd.isna(n):
+        return pd.NA
+
+    n = int(n)
+
+    if n <= 1:
+        return "Baja"
+    if n == 2:
+        return "Media"
+    if n == 3:
+        return "Tecnica"
+    return "Superior"
+
+
+def build_q3_features(dff):
+    """
+    Crea:
+        - edu_madre_n
+        - edu_padre_n
+        - capital_educativo
+        - edu_madre_bucket
+        - edu_padre_bucket
+    """
+
+    dff = dff.copy()
+
+    madre_candidates = [
+        "fami_educacionmadre",
+        "edu_madre",
+        "educ_madre"
+    ]
+
+    padre_candidates = [
+        "fami_educacionpadre",
+        "edu_padre",
+        "educ_padre"
+    ]
+
+    col_m = next((c for c in madre_candidates if c in dff.columns), None)
+    col_p = next((c for c in padre_candidates if c in dff.columns), None)
+
+    if col_m is None or col_p is None:
+        return dff, None, None
+
+    dff["edu_madre_n"] = dff[col_m].apply(edu_to_num)
+    dff["edu_padre_n"] = dff[col_p].apply(edu_to_num)
+
+    dff["capital_educativo"] = dff[["edu_madre_n", "edu_padre_n"]].mean(axis=1)
+
+    dff["edu_madre_bucket"] = dff[col_m].apply(edu_bucket)
+    dff["edu_padre_bucket"] = dff[col_p].apply(edu_bucket)
+
+    return dff, col_m, col_p
+
+
+def brecha_alto_bajo_por(dff, by_col, thr_alto=4, thr_bajo=1):
+    """
+    Brecha = promedio(punt_global | capital>=thr_alto)
+           - promedio(punt_global | capital<=thr_bajo)
+    por categoría (by_col)
+    """
+
+    if by_col not in dff.columns:
+        return pd.DataFrame()
+
+    tmp = dff.dropna(
+        subset=["capital_educativo", "punt_global", by_col]
+    ).copy()
+
+    if tmp.empty:
+        return pd.DataFrame()
+
+    tmp["grupo_capital"] = pd.NA
+    tmp.loc[tmp["capital_educativo"] >= thr_alto, "grupo_capital"] = "ALTO"
+    tmp.loc[tmp["capital_educativo"] <= thr_bajo, "grupo_capital"] = "BAJO"
+
+    tmp = tmp.dropna(subset=["grupo_capital"])
+
+    if tmp.empty:
+        return pd.DataFrame()
+
+    g = (
+        tmp.groupby([by_col, "grupo_capital"])["punt_global"]
+        .mean()
+        .reset_index()
+    )
+
+    piv = g.pivot(index=by_col,
+                  columns="grupo_capital",
+                  values="punt_global").reset_index()
+
+    if "ALTO" in piv.columns and "BAJO" in piv.columns:
+        piv["brecha"] = piv["ALTO"] - piv["BAJO"]
+    else:
+        piv["brecha"] = pd.NA
+
+    return piv
 
 #Cosas para hacer en helpers.py:
 
