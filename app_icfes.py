@@ -668,16 +668,53 @@ def q1_extra_burbujas_mcpio(data):
     if not req.issubset(set(dff.columns)):
         return q1_fig_vacia("Faltan columnas para municipio")
 
+    def _norm_mpio(x):
+        if pd.isna(x):
+            return ""
+        s = str(x).strip().upper()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        s = "".join(ch if (ch.isalpha() or ch.isspace() or ch in "()") else " " for ch in s)
+        s = " ".join(s.split()).strip()
+        return s
+
+    MUNICIPIOS_BOLIVAR = [
+        "ACHI","ALTOS DEL ROSARIO","ARENAL","ARJONA","ARROYOHONDO","BARRANCO DE LOBA","CALAMAR",
+        "CANTAGALLO","CARTAGENA","CICUCO","CLEMENCIA","CORDOBA","EL CARMEN DE BOLIVAR","EL GUAMO",
+        "EL PENON","HATILLO DE LOBA","MAGANGUE","MAHATES","MARGARITA","MARIA LA BAJA","MOMPOS",
+        "MONTECRISTO","MORALES","NOROSI","PINILLOS","REGIDOR","RIO VIEJO","SAN CRISTOBAL",
+        "SAN ESTANISLAO","SAN FERNANDO","SAN JACINTO","SAN JACINTO DEL CAUCA","SAN JUAN NEPOMUCENO",
+        "SAN MARTIN DE LOBA","SAN PABLO","SANTA CATALINA","SANTA ROSA","SANTA ROSA DEL SUR",
+        "SIMITI","SOPLAVIENTO","TALAGUA NUEVO","TIQUISIO","TURBACO","TURBANA","VILLANUEVA","ZAMBRANO"
+    ]
+    MUNICIPIOS_BOLIVAR_NORM = {_norm_mpio(m) for m in MUNICIPIOS_BOLIVAR}
+
+    ALIAS_MUNICIPIOS = {
+        "CARTAGENA DE INDIAS": "CARTAGENA",
+        "TIQUISIO (PUERTO RICO)": "TIQUISIO",
+        "PUERTO RICO": "TIQUISIO",
+        "MOMPOX": "MOMPOS",
+        "SANTA ROSA DE LIMA": "SANTA ROSA",
+    }
+
+    dff["mpio_norm"] = dff["cole_mcpio_ubicacion"].apply(_norm_mpio)
+    dff["mpio_norm"] = dff["mpio_norm"].replace(ALIAS_MUNICIPIOS)
+
+    dff = dff[dff["mpio_norm"].isin(MUNICIPIOS_BOLIVAR_NORM)].copy()
+    if dff.empty:
+        return q1_fig_vacia("No quedaron municipios válidos de Bolívar con esos filtros")
+
     dff["b_bin"] = dff["cole_bilingue"].astype(str).str.strip().str.upper().isin(["S", "SI"]).astype(int)
 
     mun = (
-        dff.groupby("cole_mcpio_ubicacion")
+        dff.groupby("mpio_norm")
         .agg(
             puntaje_promedio=("punt_global", "mean"),
             n_estudiantes=("punt_global", "size"),
             prop_b=("b_bin", "mean")
         )
         .reset_index()
+        .rename(columns={"mpio_norm": "municipio"})
     )
 
     if mun.empty:
@@ -698,7 +735,7 @@ def q1_extra_burbujas_mcpio(data):
         y="n_estudiantes",
         size="puntaje_promedio",
         color="prop_b",
-        hover_name="cole_mcpio_ubicacion",
+        hover_name="municipio",
         hover_data={"puntaje_promedio": ":.1f", "n_estudiantes": True, "prop_b": ":.2f"},
         labels={
             "puntaje_promedio": "Puntaje global promedio",
@@ -710,6 +747,7 @@ def q1_extra_burbujas_mcpio(data):
     fig.update_traces(marker=dict(opacity=0.75), selector=dict(mode="markers"))
     fig.update_layout(coloraxis_colorbar=dict(title="Proporción B"))
     return q1_estilo(fig, height=520)
+
 
 #Callback Q2
 
