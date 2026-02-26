@@ -90,12 +90,7 @@ app.layout = html.Div(
                 html.H2("Resultados de la prueba Saber 11 en el departamento del Bolívar"),
                 html.P("Análisis de resultados"),
             ],
-            style={
-                "padding": "12px 16px",
-                "borderBottom": "1px solid #ddd",
-                "backgroundColor": "#f9f9f9",
-                "textAlign": "center",
-            },
+            className="app-header",
         ),
 
         # Contenedor centrado
@@ -107,36 +102,29 @@ app.layout = html.Div(
                         html.Div([
                             html.Label("Año"),
                             dcc.Dropdown(id="f_anio", options=opciones("anio"), multi=True, placeholder="Todos"),
-                        ], style={"flex": "1"}),
+                        ], className="field"),
 
                         html.Div([
                             html.Label("Tipo colegio"),
                             dcc.Dropdown(id="f_naturaleza", options=opciones("cole_naturaleza"), multi=True, placeholder="Todos"),
-                        ], style={"flex": "1"}),
+                        ], className="field"),
 
                         html.Div([
                             html.Label("Estrato"),
                             dcc.Dropdown(id="f_estrato", options=opciones("fami_estratovivienda"), multi=True, placeholder="Todos"),
-                        ], style={"flex": "1"}),
+                        ], className="field"),
 
                     ],
-                    style={
-                        "display": "flex","gap": "12px","padding": "12px",
-                        "border": "1px solid #eee","borderRadius": "12px",
-                        "backgroundColor": "white","marginTop": "16px",
-                    },
+                    className="filters-row",
                 ),
 
                 # Resumen como
                 html.Div(
                     [
-                        html.H3("Resumen", style={"marginTop": "0px"}),
+                        html.H3("Resumen", className="section-title"),
                         html.Div(id="resumen"),
                     ],
-                    style={
-                        "marginTop": "12px","padding": "12px","border": "1px solid #eee",
-                        "borderRadius": "12px","backgroundColor": "white",
-                    },
+                    className="card",
                 ),
 
                 # Q1
@@ -148,16 +136,14 @@ app.layout = html.Div(
                         dcc.Tab(label="Pregunta 2: Género", value="tab-q2"),
                         dcc.Tab(label="Pregunta 3: Educación padres", value="tab-q3"),
                     ],
+                    className="tabs"
                 ),
-                html.Div(id="contenido_tabs", style={"marginTop": "12px"}),
+                html.Div(id="contenido_tabs", className="tab-content"),
             ],
-            style={
-                "maxWidth": "1500px",   # limita el ancho para mejor lectura
-                "margin": "0 auto",     # centra
-                "padding": "0 16px 40px 16px",
-            },
+            className="container",
         ),
-    ]
+    ],
+    className="page",
 )
 
 # -----------
@@ -189,321 +175,249 @@ def filtrar_df(anios, naturalezas, estratos):
 
 # función para renderizar el contenido de cada pestaña
 def render_tab(tab):
+
     if tab == "tab-q1":
         return html.Div(
             [
+                html.H3("Relación de colegio bilingüe y puntaje global", className="h3-title"),
+
+                html.Div([dcc.Graph(id="grafico_q1")], className="graph-card"),
+                html.Div(id="insight_q1", className="insight"),
+
+                html.H4("Mapa (municipios)", className="h4-title"),
+                html.Div([dcc.Graph(id="mapa_q1_bilingue_delta")], className="graph-card"),
+
+                html.H4("Diferencia por estrato", className="h4-title"),
+                html.Div(
+                    [html.Div([dcc.Graph(id="grafico_q1_estrato")], className="graph-card")],
+                    className="grid-1",
+                ),
+
+                html.H4("Gráficas adicionales", className="h4-title"),
                 html.Div(
                     [
-                        html.H3("Relación de colegio bilingüe y puntaje global"),
-                        dcc.Graph(id="grafico_q1"),
-                        html.Div(
-                            id="insight_q1",
-                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
-                        ),
-                        html.H4("Mapa (municipios)"),
-                        dcc.Graph(id="mapa_q1_bilingue_delta"),
-
-                        # 2 por fila
-                        html.Div(
-                            [
-                                html.Div([dcc.Graph(id="grafico_q1_estrato")], style={"flex": "1"}),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
-
-                      html.H4("Gráficas adicionales", style={"marginTop": "0px"}),
-
-                        html.Div(
-                            [
-                                html.Div([dcc.Graph(id="grafico_q1_box_estrato")], style={"flex": "1"}),
-                                html.Div([dcc.Graph(id="grafico_q1_heatmap")], style={"flex": "1"}),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
-
-                        html.Div(
-                            [
-                                html.Div([dcc.Graph(id="grafico_q1_scatter_matrix")], style={"flex": "1"}),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
-
-                        html.Div(
-                            [
-                                html.Div([dcc.Graph(id="grafico_q1_burbujas_mcpio")], style={"flex": "1"}),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
+                        html.Div([dcc.Graph(id="grafico_q1_box_estrato")], className="graph-card"),
+                        html.Div([dcc.Graph(id="grafico_q1_heatmap")], className="graph-card"),
                     ],
-                    style={
-                        "padding": "12px",
-                        "border": "1px solid #eee",
-                        "borderRadius": "12px",
-                        "backgroundColor": "white",
-                    },
-                )
-            ]
-        )
+                    className="grid-2",
+                ),
 
+                html.Div(
+                    [html.Div([dcc.Graph(id="grafico_q1_scatter_matrix")], className="graph-card")],
+                    className="grid-1",
+                ),
+
+                html.Div(
+                    [html.Div([dcc.Graph(id="grafico_q1_burbujas_mcpio")], className="graph-card")],
+                    className="grid-1",
+                ),
+            ],
+            className="card q-section",
+        )
+    
+    # ===== Q2 =====
     if tab == "tab-q2":
         return html.Div(
             [
+                html.H3("Diferencia de desempeño entre mujeres y hombres", className="h3-title"),
+                html.P("La diferencia se calcula como (Masculino - Femenino).", className="muted"),
+
+                # --- Bloque 1
+                html.H4("Diferencia por prueba (Saber 11)", className="h4-title"),
                 html.Div(
                     [
-                        html.H3("Diferencia de desempeño entre mujeres y hombres"),
-                        html.P(
-                            "La diferencia se calcula como (Masculino - Femenino). "
-                            
-                        ),
-
-                       
-                        # GRÁFICA 1: BRECHA POR PRUEBA
-                        
-                        html.H4("Diferencia por prueba (Saber 11)"),
-
                         html.Div(
                             [
-                                # Slider independiente para la gráfica 1
-                                html.Div(
-                                    [
-                                        html.Label("Año"),
-                                        dcc.Slider(
-                                            id="q2_year_slider_prueba",
-                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
-                                            max=ANIO_TODOS,
-                                            value=ANIO_TODOS,
-                                            marks=marks_anio,
-                                            step=None,
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-                                # Dropdown multi de pruebas para gráfica 1
-                                html.Div(
-                                    [
-                                        html.Label("Pruebas a mostrar"),
-                                        dcc.Dropdown(
-                                            id="q2_pruebas",
-                                            options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
-                                            value=["punt_global"],
-                                            multi=True,
-                                            placeholder="Seleccione una o varias pruebas",
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
+                                html.Label("Año"),
+                                dcc.Slider(
+                                    id="q2_year_slider_prueba",
+                                    min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                    max=ANIO_TODOS,
+                                    value=ANIO_TODOS,
+                                    marks=marks_anio,
+                                    step=None,
                                 ),
                             ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                            className="field",
                         ),
-
-                        dcc.Graph(id="grafico_q2_brecha_pruebas"),
-
-                        html.Div(
-                            id="insight_q2_pruebas",
-                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
-                        ),
-
-                        html.Hr(),
-
-                        #Grafica 2
-                        html.H4("Diferencia por tipo de colegio"),
-
                         html.Div(
                             [
-                                # Slider independiente para la gráfica 2
-                                html.Div(
-                                    [
-                                        html.Label("Año"),
-                                        dcc.Slider(
-                                            id="q2_year_slider_cole",
-                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
-                                            max=ANIO_TODOS,
-                                            value=ANIO_TODOS,
-                                            marks=marks_anio,
-                                            step=None,
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-
-                                # Dropdown multi de pruebas para gráfica 2
-                                html.Div(
-                                    [
-                                        html.Label("Pruebas a mostrar"),
-                                        dcc.Dropdown(
-                                            id="q2_pruebas_cole",
-                                            options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
-                                            value=["punt_global"],
-                                            multi=True,
-                                            placeholder="Seleccione una o varias pruebas",
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-
-                                # Dropdown multi para filtrar tipos de colegio
-                                
-                                html.Div(
-                                    [
-                                        html.Label("Filtrar tipo de colegio"),
-                                        dcc.Dropdown(
-                                            id="q2_cole_filtro",
-                                            options=[],          # se llena dinámicamente
-                                            value=[],            # vacío = sin filtro (todos)
-                                            multi=True,
-                                            placeholder="Seleccione uno o varios tipos",
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
+                                html.Label("Pruebas a mostrar"),
+                                dcc.Dropdown(
+                                    id="q2_pruebas",
+                                    options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
+                                    value=["punt_global"],
+                                    multi=True,
+                                    placeholder="Seleccione una o varias pruebas",
                                 ),
                             ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
+                            className="field",
                         ),
-
-                        dcc.Graph(id="grafico_q2_brecha_colegio"),
-
-                        html.Div(
-                            id="insight_q2_colegio",
-                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
-                        ),
-
-                        # BRECHA POR ESTRATO
-                        
-                        html.Hr(),
-
-                        html.H4("Diferencia por estrato del hogar"),
-
-                        html.Div(
-                            [
-                                # Slider independiente para la gráfica 3
-                                html.Div(
-                                    [
-                                        html.Label("Año"),
-                                        dcc.Slider(
-                                            id="q2_year_slider_estrato",
-                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
-                                            max=ANIO_TODOS,
-                                            value=ANIO_TODOS,  # por defecto: Todos
-                                            marks=marks_anio,
-                                            step=None,
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-
-                                # Dropdown multi de pruebas para gráfica 3
-                                html.Div(
-                                    [
-                                        html.Label("Pruebas a mostrar"),
-                                        dcc.Dropdown(
-                                            id="q2_pruebas_estrato",
-                                            options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
-                                            value=["punt_global"],  # por defecto: Global
-                                            multi=True,
-                                            placeholder="Seleccione una o varias pruebas",
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-
-                                # Dropdown multi para filtrar estratos (se llena dinámicamente)
-                                html.Div(
-                                    [
-                                        html.Label("Filtrar estrato"),
-                                        dcc.Dropdown(
-                                            id="q2_estrato_filtro",
-                                            options=[],   # se llena con callback
-                                            value=[],     # vacío = sin filtro (todos)
-                                            multi=True,
-                                            placeholder="Seleccione uno o varios estratos",
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
-
-                        dcc.Graph(id="grafico_q2_brecha_estrato"),
-
-                        html.Div(
-                            id="insight_q2_estrato",
-                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
-                        ),
-                        html.H4("Distribución porcentual por género"),
-
-                        html.Div(
-                            [
-                                html.Div(
-                                    [
-                                        html.Label("Año"),
-                                        dcc.Slider(
-                                            id="q2_year_slider_genero",
-                                            min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
-                                            max=ANIO_TODOS,
-                                            value=ANIO_TODOS,
-                                            marks=marks_anio,
-                                            step=None,
-                                        ),
-                                    ],
-                                    style={"flex": "1"},
-                                ),
-                            ],
-                            style={"display": "flex", "gap": "12px", "marginTop": "10px"},
-                        ),
-
-                        dcc.Graph(id="grafico_q2_dist_genero"),
-
-                        html.Div(
-                            id="insight_q2_genero",
-                            style={"marginTop": "6px", "fontSize": "13px", "lineHeight": "1.4", "color": "#555"},
-                        ),
-
-                        html.Hr(),
-
                     ],
-                    style={
-                        "padding": "12px",
-                        "border": "1px solid #eee",
-                        "borderRadius": "12px",
-                        "backgroundColor": "white",
-                    },
-                )
-            ]
+                    className="filters-row",
+                ),
+                html.Div([dcc.Graph(id="grafico_q2_brecha_pruebas")], className="graph-card"),
+                html.Div(id="insight_q2_pruebas", className="insight"),
+
+                html.Hr(className="hr"),
+
+                # --- Bloque 2
+                html.H4("Diferencia por tipo de colegio", className="h4-title"),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Label("Año"),
+                                dcc.Slider(
+                                    id="q2_year_slider_cole",
+                                    min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                    max=ANIO_TODOS,
+                                    value=ANIO_TODOS,
+                                    marks=marks_anio,
+                                    step=None,
+                                ),
+                            ],
+                            className="field",
+                        ),
+                        html.Div(
+                            [
+                                html.Label("Pruebas a mostrar"),
+                                dcc.Dropdown(
+                                    id="q2_pruebas_cole",
+                                    options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
+                                    value=["punt_global"],
+                                    multi=True,
+                                    placeholder="Seleccione una o varias pruebas",
+                                ),
+                            ],
+                            className="field",
+                        ),
+                        html.Div(
+                            [
+                                html.Label("Filtrar tipo de colegio"),
+                                dcc.Dropdown(
+                                    id="q2_cole_filtro",
+                                    options=[],
+                                    value=[],
+                                    multi=True,
+                                    placeholder="Seleccione uno o varios tipos",
+                                ),
+                            ],
+                            className="field",
+                        ),
+                    ],
+                    className="filters-row",
+                ),
+                html.Div([dcc.Graph(id="grafico_q2_brecha_colegio")], className="graph-card"),
+                html.Div(id="insight_q2_colegio", className="insight"),
+
+                html.Hr(className="hr"),
+
+                # --- Bloque 3
+                html.H4("Diferencia por estrato del hogar", className="h4-title"),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Label("Año"),
+                                dcc.Slider(
+                                    id="q2_year_slider_estrato",
+                                    min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                    max=ANIO_TODOS,
+                                    value=ANIO_TODOS,
+                                    marks=marks_anio,
+                                    step=None,
+                                ),
+                            ],
+                            className="field",
+                        ),
+                        html.Div(
+                            [
+                                html.Label("Pruebas a mostrar"),
+                                dcc.Dropdown(
+                                    id="q2_pruebas_estrato",
+                                    options=[{"label": v, "value": k} for k, v in Q2_PUNTAJES.items()],
+                                    value=["punt_global"],
+                                    multi=True,
+                                    placeholder="Seleccione una o varias pruebas",
+                                ),
+                            ],
+                            className="field",
+                        ),
+                        html.Div(
+                            [
+                                html.Label("Filtrar estrato"),
+                                dcc.Dropdown(
+                                    id="q2_estrato_filtro",
+                                    options=[],
+                                    value=[],
+                                    multi=True,
+                                    placeholder="Seleccione uno o varios estratos",
+                                ),
+                            ],
+                            className="field",
+                        ),
+                    ],
+                    className="filters-row",
+                ),
+                html.Div([dcc.Graph(id="grafico_q2_brecha_estrato")], className="graph-card"),
+                html.Div(id="insight_q2_estrato", className="insight"),
+
+                html.Hr(className="hr"),
+
+                # --- Bloque 4
+                html.H4("Distribución porcentual por género", className="h4-title"),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Label("Año"),
+                                dcc.Slider(
+                                    id="q2_year_slider_genero",
+                                    min=int(min(anios_disponibles)) if len(anios_disponibles) > 0 else 0,
+                                    max=ANIO_TODOS,
+                                    value=ANIO_TODOS,
+                                    marks=marks_anio,
+                                    step=None,
+                                ),
+                            ],
+                            className="field",
+                        ),
+                    ],
+                    className="filters-row",
+                ),
+                html.Div([dcc.Graph(id="grafico_q2_dist_genero")], className="graph-card"),
+                html.Div(id="insight_q2_genero", className="insight"),
+            ],
+            className="card q-section",
         )
 
+    # ===== Q3 =====
     if tab == "tab-q3":
         return html.Div(
             [
-                html.Div(
-                    [
-                        html.H3("Influencia Educación padres, capital educativo y puntaje global"),
-                        html.Hr(),
+                html.H3("Influencia Educación padres, capital educativo y puntaje global", className="h3-title"),
 
-                        html.H4("Puntaje global vs capital educativo familiar (boxplot)"),
-                        dcc.Graph(id="q3_box_capital"),
+                html.H4("Puntaje global vs capital educativo familiar (boxplot)", className="h4-title"),
+                html.Div([dcc.Graph(id="q3_box_capital")], className="graph-card"),
 
-                        html.Hr(),
-                        html.H4("Puntaje promedio según educación de madre y padre (agrupado)"),
-                        dcc.Graph(id="q3_bar_madre_padre"),
+                html.Hr(className="hr"),
 
-                        html.Hr(),
-                        html.H4("Heatmap de correlaciones"),
-                        dcc.Graph(id="q3_heatmap_corr"),
-                        html.Pre(id="q3_debug", style={"whiteSpace": "pre-wrap", "fontSize": "12px"}),
+                html.H4("Puntaje promedio según educación de madre y padre (agrupado)", className="h4-title"),
+                html.Div([dcc.Graph(id="q3_bar_madre_padre")], className="graph-card"),
 
-                        html.Hr(),
-                        html.H4("Brecha (ALTO - BAJO) por ubicación y naturaleza"),
-                        dcc.Graph(id="q3_brecha_ub_nat"),
-                    ],
-                    style={
-                        "padding": "12px",
-                        "border": "1px solid #eee",
-                        "borderRadius": "12px",
-                        "backgroundColor": "white",
-                    },
-                )
-            ]
+                html.Hr(className="hr"),
+
+                html.H4("Heatmap de correlaciones", className="h4-title"),
+                html.Div([dcc.Graph(id="q3_heatmap_corr")], className="graph-card"),
+                html.Pre(id="q3_debug", className="muted"),
+
+                html.Hr(className="hr"),
+
+                html.H4("Brecha (ALTO - BAJO) por ubicación y naturaleza", className="h4-title"),
+                html.Div([dcc.Graph(id="q3_brecha_ub_nat")], className="graph-card"),
+            ],
+            className="card q-section",
         )
 
     return html.Div("Selecciona una pestaña.")

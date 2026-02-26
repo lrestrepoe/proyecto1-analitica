@@ -1,0 +1,312 @@
+/* ---------- Base / Reset ---------- */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #f6f7fb;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: #111827;
+}
+
+* { box-sizing: border-box; }
+
+/* ---------- Layout ---------- */
+.page {
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 18px 18px 40px 18px;
+}
+
+/* ---------- Header ---------- */
+.app-header {
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 18px 16px;
+  text-align: center;
+}
+
+.app-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.app-header p {
+  margin: 6px 0 0 0;
+  color: #6b7280;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  margin-top: 12px;
+}
+
+.section-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+/* ---------- Filters ---------- */
+.filters-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+
+.field {
+  flex: 1;
+  min-width: 240px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+/* ---------- Tabs ---------- */
+.tabs {
+  margin-top: 12px;
+  background: transparent;
+}
+
+.tab {
+  padding: 10px 12px !important;
+  border: 1px solid transparent !important;
+  color: #374151 !important;
+  background: transparent !important;
+  font-weight: 600;
+}
+
+.tab--selected {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-bottom: 2px solid #111827 !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+
+.tab-content {
+  margin-top: 10px;
+}
+
+/* ---------- Dash components tweaks ---------- */
+/* Dropdown container */
+.Select-control {
+  border-radius: 10px !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: none !important;
+}
+
+/* Slider */
+.rc-slider {
+  margin-top: 8px;
+}
+.rc-slider-rail {
+  background: #e5e7eb;
+}
+.rc-slider-handle {
+  border: 2px solid #111827;
+}
+
+/* Graph cards look nicer inside */
+.js-plotly-plot, .dash-graph {
+  background: transparent !important;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 980px) {
+  .filters-row {
+    flex-direction: column;
+  }
+  .field {
+    min-width: 100%;
+  }
+}
+
+/* =========================
+   Base
+========================= */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #f6f7fb;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: #111827;
+}
+* { box-sizing: border-box; }
+
+/* =========================
+   Layout general
+========================= */
+.page { min-height: 100vh; }
+
+.container {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 18px 18px 40px 18px;
+}
+
+.app-header {
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 18px 16px;
+  text-align: center;
+}
+.app-header h2 { margin: 0; font-size: 22px; font-weight: 750; }
+.app-header p { margin: 6px 0 0 0; color: #6b7280; }
+
+/* =========================
+   Cards / Secciones
+========================= */
+.card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+
+.card + .card { margin-top: 12px; }
+
+.section-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.h3-title {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.h4-title {
+  margin: 12px 0 6px 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* =========================
+   Filtros (arriba)
+========================= */
+.filters-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+
+.field { flex: 1; min-width: 240px; }
+.field label { display: block; font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+
+/* =========================
+   Tabs
+========================= */
+.tabs { margin-top: 12px; }
+.tab { padding: 10px 12px !important; font-weight: 700; }
+.tab--selected {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-bottom: 2px solid #111827 !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+.tab-content { margin-top: 10px; }
+
+/* =========================
+   Q1/Q2/Q3 layout helpers
+========================= */
+
+/* Sección principal de cada pregunta */
+.q-section { margin-top: 10px; }
+
+/* Bloque de gráficos con separación */
+.block { margin-top: 10px; }
+
+/* Grids para gráficos */
+.grid-1 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+/* Cada gráfica “encapsulada” */
+.graph-card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  border-radius: 14px;
+  padding: 10px;
+}
+
+/* Ajuste de altura y look general de plotly */
+.dash-graph { border-radius: 12px; }
+
+/* Insights debajo de gráficas */
+.insight {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px dashed #e5e7eb;
+  border-radius: 12px;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Separadores */
+.hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 14px 0;
+}
+
+/* =========================
+   Dash components tweaks
+========================= */
+.Select-control {
+  border-radius: 10px !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: none !important;
+}
+.rc-slider { margin-top: 8px; }
+.rc-slider-rail { background: #e5e7eb; }
+
+/* =========================
+   Responsive
+========================= */
+@media (max-width: 980px) {
+  .filters-row { flex-direction: column; }
+  .field { min-width: 100%; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
