@@ -7,7 +7,7 @@ import plotly.express as px
 import unicodedata
 from src.helpers import (build_dropdown_options, map_sino, mean_by, apply_year_filter, 
                          brecha_genero_long, build_insight_maxmin, delta_yes_no, fig_delta_bar, order_estrato_like,
-                         edu_to_num, edu_bucket, build_q3_features, brecha_alto_bajo_por) 
+                         edu_to_num, edu_bucket, build_q3_features, brecha_alto_bajo_por, q1_fig_vacia, q1_b_label_B_NB, q1_orden_estratos, q1_acceso_digital, q1_estilo )
                             
 
 # Cargar el DataFrame global desde un archivo Parquet
@@ -607,15 +607,15 @@ def q1_delta_por_estrato(data):
 def q1_extra_box_estrato(data):
     dff = pd.DataFrame(data)
     if dff.empty:
-        return _q1_fig_vacia("No hay datos con esos filtros")
+        return q1_fig_vacia("No hay datos con esos filtros")
 
     req = {"cole_bilingue", "fami_estratovivienda", "punt_global"}
     if not req.issubset(set(dff.columns)):
-        return _q1_fig_vacia("Faltan columnas para el boxplot")
+        return q1_fig_vacia("Faltan columnas para el boxplot")
 
-    dff["b_label"] = _q1_b_label_B_NB(dff["cole_bilingue"])
+    dff["b_label"] = q1_b_label_B_NB(dff["cole_bilingue"])
     dff["estrato_label"] = dff["fami_estratovivienda"].astype(str).str.strip().str.upper()
-    estrato_order = _q1_orden_estratos(dff["estrato_label"])
+    estrato_order = q1_orden_estratos(dff["estrato_label"])
 
     fig = px.box(
         dff,
@@ -628,7 +628,7 @@ def q1_extra_box_estrato(data):
         title="Puntaje global por estrato comparando B y NB"
     )
     fig.update_layout(boxmode="group")
-    return _q1_estilo(fig, height=520)
+    return q1_estilo(fig, height=520)
 
 
 @app.callback(
@@ -638,17 +638,17 @@ def q1_extra_box_estrato(data):
 def q1_extra_heatmap(data):
     dff = pd.DataFrame(data)
     if dff.empty:
-        return _q1_fig_vacia("No hay datos con esos filtros")
+        return q1_fig_vacia("No hay datos con esos filtros")
 
     req = {"cole_bilingue", "fami_estratovivienda", "fami_tieneinternet", "fami_tienecomputador", "punt_global"}
     if not req.issubset(set(dff.columns)):
-        return _q1_fig_vacia("Faltan columnas para el mapa de calor")
+        return q1_fig_vacia("Faltan columnas para el mapa de calor")
 
-    dff["b_label"] = _q1_b_label_B_NB(dff["cole_bilingue"])
+    dff["b_label"] = q1_b_label_B_NB(dff["cole_bilingue"])
     dff["estrato_label"] = dff["fami_estratovivienda"].astype(str).str.strip().str.upper()
-    dff["acceso_digital"] = _q1_acceso_digital(dff)
+    dff["acceso_digital"] = q1_acceso_digital(dff)
 
-    estrato_order = _q1_orden_estratos(dff["estrato_label"])
+    estrato_order = q1_orden_estratos(dff["estrato_label"])
     acceso_order = ["Sin internet y sin computador", "Solo internet", "Solo computador", "Internet y computador"]
 
     medianas = (
@@ -664,7 +664,7 @@ def q1_extra_heatmap(data):
     )
 
     if ("B" not in pivot.columns.get_level_values(1)) or ("NB" not in pivot.columns.get_level_values(1)):
-        return _q1_fig_vacia("No hay comparación suficiente B vs NB")
+        return q1_fig_vacia("No hay comparación suficiente B vs NB")
 
     diff = (
         pivot.xs("B", axis=1, level=1) -
@@ -678,7 +678,7 @@ def q1_extra_heatmap(data):
         labels=dict(x="Acceso digital en el hogar", y="Estrato", color="Diferencia de mediana"),
         title="Ventaja B sobre NB por estrato y acceso digital"
     )
-    return _q1_estilo(fig, height=520)
+    return q1_estilo(fig, height=520)
 
 
 @app.callback(
@@ -688,7 +688,7 @@ def q1_extra_heatmap(data):
 def q1_extra_scatter_matrix(data):
     dff = pd.DataFrame(data)
     if dff.empty:
-        return _q1_fig_vacia("No hay datos con esos filtros")
+        return q1_fig_vacia("No hay datos con esos filtros")
 
     req = {
         "punt_ingles",
@@ -700,9 +700,9 @@ def q1_extra_scatter_matrix(data):
         "cole_bilingue"
     }
     if not req.issubset(set(dff.columns)):
-        return _q1_fig_vacia("Faltan columnas para la matriz de dispersión")
+        return q1_fig_vacia("Faltan columnas para la matriz de dispersión")
 
-    dff["b_label"] = _q1_b_label_B_NB(dff["cole_bilingue"])
+    dff["b_label"] = q1_b_label_B_NB(dff["cole_bilingue"])
 
     n_sample = 8000
     dff_sm = dff.sample(n=min(len(dff), n_sample), random_state=42)
@@ -748,11 +748,11 @@ def q1_extra_scatter_matrix(data):
 def q1_extra_burbujas_mcpio(data):
     dff = pd.DataFrame(data)
     if dff.empty:
-        return _q1_fig_vacia("No hay datos con esos filtros")
+        return q1_fig_vacia("No hay datos con esos filtros")
 
     req = {"cole_mcpio_ubicacion", "punt_global", "cole_bilingue"}
     if not req.issubset(set(dff.columns)):
-        return _q1_fig_vacia("Faltan columnas para municipio")
+        return q1_fig_vacia("Faltan columnas para municipio")
 
     dff["b_bin"] = dff["cole_bilingue"].astype(str).str.strip().str.upper().isin(["S", "SI"]).astype(int)
 
@@ -767,7 +767,7 @@ def q1_extra_burbujas_mcpio(data):
     )
 
     if mun.empty:
-        return _q1_fig_vacia("No hay datos para municipios")
+        return q1_fig_vacia("No hay datos para municipios")
 
     umbral = 50
     mun_fil = mun[mun["n_estudiantes"] >= umbral].copy()
@@ -795,7 +795,7 @@ def q1_extra_burbujas_mcpio(data):
     )
     fig.update_traces(marker=dict(opacity=0.75), selector=dict(mode="markers"))
     fig.update_layout(coloraxis_colorbar=dict(title="Proporción B"))
-    return _q1_estilo(fig, height=520)
+    return q1_estilo(fig, height=520)
 
 #Callback Q2
 

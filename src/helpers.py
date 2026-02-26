@@ -2,7 +2,7 @@
 import pandas as pd
 from typing import Optional, List, Dict
 import plotly.express as px
-
+import re
 
 BINARY_SINO = {"S": "Sí", "SI": "Sí", "N": "No", "NO": "No"}
 
@@ -348,6 +348,58 @@ def brecha_alto_bajo_por(dff, by_col, thr_alto=4, thr_bajo=1):
         piv["brecha"] = pd.NA
 
     return piv
+
+def q1_fig_vacia(msg="Sin datos"):
+    fig = px.bar(title=msg)
+    fig.update_layout(template="plotly_white", height=420, margin=dict(l=40, r=20, t=60, b=40))
+    return fig
+
+def _is_yes(s) -> bool:
+    if s is None:
+        return False
+    if isinstance(s, (int, float)):
+        return bool(int(s)) if pd.notna(s) else False
+    s = str(s).strip().upper()
+    return s in {"S", "SI", "SÍ", "1", "TRUE", "T", "Y", "YES"}
+
+def q1_b_label_B_NB(series: pd.Series) -> pd.Series:
+    return series.apply(lambda x: "B" if _is_yes(x) else "NB")
+
+def q1_orden_estratos(series: pd.Series) -> list[str]:
+    vals = series.dropna().astype(str).str.strip().str.upper().unique().tolist()
+
+    def key(v):
+        m = re.search(r"\d+", v)
+        return (0, int(m.group())) if m else (1, v)
+
+    return sorted(vals, key=key)
+
+def q1_acceso_digital(dff: pd.DataFrame) -> pd.Series:
+    internet = dff["fami_tieneinternet"].apply(_is_yes) if "fami_tieneinternet" in dff.columns else False
+    pc = dff["fami_tienecomputador"].apply(_is_yes) if "fami_tienecomputador" in dff.columns else False
+
+    out = []
+    for i, p in zip(internet, pc):
+        if (not i) and (not p):
+            out.append("Sin internet y sin computador")
+        elif i and (not p):
+            out.append("Solo internet")
+        elif (not i) and p:
+            out.append("Solo computador")
+        else:
+            out.append("Internet y computador")
+    return pd.Series(out, index=dff.index)
+
+def q1_estilo(fig, height=520):
+    fig.update_layout(
+        template="plotly_white",
+        height=height,
+        margin=dict(l=60, r=20, t=70, b=60),
+        title_x=0.02,
+        font=dict(size=13),
+    )
+    return fig
+
 
 #Cosas para hacer en helpers.py:
 
