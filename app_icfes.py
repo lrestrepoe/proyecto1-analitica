@@ -17,7 +17,7 @@ BASE_DIR = Path(__file__).resolve().parent
 df = pd.read_parquet(BASE_DIR / "data" / "df_global.parquet")
 
 #  Cargar GeoJSON mapa y que se ajuste a los datos
-GEOJSON_PATH = BASE_DIR / "data" / "mpios.json"  # <-- cambia al nombre real
+GEOJSON_PATH = BASE_DIR / "data" / "mpios_bolivar_fix.json"  # <-- cambia al nombre real
 with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
     geojson_mcpios = json.load(f)
 
@@ -958,6 +958,43 @@ def norm_txt(x: str) -> str:
     x = " ".join(x.split())
     return x
 
+def _bbox_from_geojson(gj):
+    minx = miny = 1e18
+    maxx = maxy = -1e18
+
+    def walk(coords):
+        if isinstance(coords[0], (int, float)):
+            x, y = coords
+            return [(x, y)]
+        out = []
+        for c in coords:
+            out.extend(walk(c))
+        return out
+
+    for ft in gj.get("features", []):
+        geom = ft.get("geometry") or {}
+        coords = geom.get("coordinates")
+        if coords is None:
+            continue
+        for x, y in walk(coords):
+            minx = min(minx, x); maxx = max(maxx, x)
+            miny = min(miny, y); maxy = max(maxy, y)
+
+    return minx, miny, maxx, maxy
+
+
+def _zoom_from_bbox(minx, miny, maxx, maxy):
+    dx = maxx - minx
+    dy = maxy - miny
+    span = max(dx, dy)
+
+    if span <= 0.2:  return 9.5
+    if span <= 0.4:  return 8.8
+    if span <= 0.7:  return 8.2
+    if span <= 1.2:  return 7.5
+    if span <= 2.0:  return 6.8
+    return 6.0
+
 # --- lista de municipios del GEOJSON (Bolívar) normalizada ---
 MPIOS_BOLIVAR = sorted({
     norm_txt(f["properties"].get("name", ""))
@@ -1016,6 +1053,8 @@ def mapa_delta_bilingue_por_mpio(data):
     #    entonces necesitamos crear una copia del geojson con name normalizado:
 
     geojson_norm = {"type": "FeatureCollection", "features": []}
+
+    
     for f in geojson_mcpios.get("features", []):
         ff = dict(f)
         props = dict(ff.get("properties", {}))
@@ -1032,7 +1071,8 @@ def mapa_delta_bilingue_por_mpio(data):
 
 # merge con piv
     piv = piv.merge(prom, on="mpio_norm", how="left")
-    
+
+
     fig = px.choropleth_mapbox(
         piv,
         geojson=geojson_norm,
@@ -1040,15 +1080,21 @@ def mapa_delta_bilingue_por_mpio(data):
         featureidkey="properties.name_norm",
         color="promedio_total",
         mapbox_style="carto-positron",
-        zoom=7,
-        center={"lat": 9.2, "lon": -74.8},
         opacity=0.65,
         hover_name="mpio_norm",
         hover_data={"Sí": True, "No": True, "delta": True},
         title="Mapa: Δ puntaje global (Bilingüe Sí - No) por municipio | Bolívar",
     )
 
-    fig.update_layout(margin=dict(l=0, r=0, t=45, b=0))
+    minx, miny, maxx, maxy = _bbox_from_geojson(geojson_norm)
+    center = {"lon": (minx + maxx) / 2, "lat": (miny + maxy) / 2}
+    zoom = _zoom_from_bbox(minx, miny, maxx, maxy)
+
+    fig.update_layout(
+        mapbox=dict(center=center, zoom=zoom),
+        margin=dict(l=0, r=0, t=45, b=0),
+)
+
     return fig
 
 @app.callback(

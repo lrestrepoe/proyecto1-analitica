@@ -401,6 +401,7 @@ def q1_estilo(fig, height=520):
     return fig
 
 
+
 #Cosas para hacer en helpers.py:
 
 #reduce líneas es sacar el bloque de geojson_norm fuera del callback del mapa (para no reconstruirlo en cada interacción). Te digo cómo dejarlo cacheado arriba (se nota en velocidad también).
